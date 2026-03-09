@@ -1,0 +1,127 @@
+ocui_version: "1.0"
+skill: foodclaw
+skill_version: "1.0.0"
+display_name: Restaurant Management
+icon: utensils
+color: "#dc2626"
+default_entity: menu
+
+domains:
+  - key: menu
+    label: Menu
+    entities: [menu, menu_item, modifier_group, modifier]
+  - key: recipes
+    label: Recipes
+    entities: [recipe, recipe_ingredient]
+  - key: inventory
+    label: Inventory
+    entities: [ingredient, stock_count, waste_log, purchase_order]
+  - key: staff
+    label: Staff
+    entities: [employee, shift, tip_distribution]
+  - key: catering
+    label: Catering
+    entities: [catering_event, catering_item, dietary_requirement]
+  - key: food_safety
+    label: Food Safety
+    entities: [haccp_log, temp_reading, inspection]
+  - key: reports
+    label: Reports
+    entities: []
+
+dashboard:
+  kpis:
+    - key: active_menus
+      label: "Active Menus"
+      type: count
+      action: food-list-menus
+      icon: book-open
+      drill_action: food-list-menus
+    - key: total_recipes
+      label: "Recipes"
+      type: count
+      action: food-list-recipes
+      icon: chef-hat
+      drill_action: food-list-recipes
+    - key: low_stock_items
+      label: "Below Par Level"
+      type: count
+      action: food-par-level-alert
+      severity: warning
+      icon: alert-triangle
+      drill_action: food-par-level-alert
+    - key: upcoming_events
+      label: "Upcoming Events"
+      type: count
+      action: food-list-catering-events
+      filter: { event-status: confirmed }
+      severity: info
+      icon: calendar
+      drill_action: food-list-catering-events
+      drill_filter: { event-status: confirmed }
+    - key: pending_inspections
+      label: "Pending Inspections"
+      type: count
+      action: food-list-inspections
+      filter: { inspection-status: scheduled }
+      severity: warning
+      icon: clipboard-check
+      drill_action: food-list-inspections
+      drill_filter: { inspection-status: scheduled }
+  quick_actions:
+    - action: food-add-menu
+      label: "New Menu"
+      icon: book-open
+    - action: food-add-menu-item
+      label: "New Menu Item"
+      icon: plus-circle
+    - action: food-add-recipe
+      label: "New Recipe"
+      icon: chef-hat
+    - action: food-add-shift
+      label: "Schedule Shift"
+      icon: clock
+    - action: food-add-catering-event
+      label: "New Catering Event"
+      icon: calendar
+    - action: food-add-haccp-log
+      label: "HACCP Log"
+      icon: shield-check
+
+workflows:
+  - after: food-add-menu
+    suggest:
+      - action: food-add-menu-item
+        label: "Add menu items"
+        pass: { menu-id: id }
+  - after: food-add-menu-item
+    suggest:
+      - action: food-add-recipe
+        label: "Build recipe"
+        pass: { menu-item-id: id }
+      - action: food-add-modifier-group
+        label: "Add modifier group"
+        pass: { menu-item-id: id }
+  - after: food-add-recipe
+    suggest:
+      - action: food-add-recipe-ingredient
+        label: "Add ingredients"
+        pass: { recipe-id: id }
+  - after: food-add-recipe-ingredient
+    suggest:
+      - action: food-calculate-recipe-cost
+        label: "Calculate recipe cost"
+        pass: { recipe-id: recipe_id }
+  - after: food-add-catering-event
+    suggest:
+      - action: food-add-catering-item
+        label: "Add menu items to event"
+        pass: { event-id: id }
+      - action: food-add-dietary-requirement
+        label: "Note dietary requirements"
+        pass: { event-id: id }
+  - after: food-add-ingredient
+    suggest:
+      - action: food-add-stock-count
+        label: "Record stock count"
+        pass: { ingredient-id: id }

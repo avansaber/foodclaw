@@ -48,43 +48,43 @@ def _validate_enum(value, valid_values, field_name):
 # ---------------------------------------------------------------------------
 def add_employee(conn, args):
     _validate_company(conn, args.company_id)
-    first_name = getattr(args, "first_name", None)
-    last_name = getattr(args, "last_name", None)
-    if not first_name:
-        err("--first-name is required")
-    if not last_name:
-        err("--last-name is required")
+    core_emp_id = getattr(args, "employee_id", None)
+    if not core_emp_id:
+        err("--employee-id is required (must reference a core employee record)")
+    row = conn.execute("SELECT id, full_name FROM employee WHERE id = ?", (core_emp_id,)).fetchone()
+    if not row:
+        err(f"Core employee {core_emp_id} not found. Create the employee in erpclaw-hr first.")
     _validate_enum(getattr(args, "role", None), VALID_ROLES, "role")
+
+    # Check for duplicate extension record
+    dup = conn.execute("SELECT id FROM foodclaw_employee WHERE employee_id = ?", (core_emp_id,)).fetchone()
+    if dup:
+        err(f"FoodClaw extension already exists for employee {core_emp_id} (foodclaw_employee.id={dup[0]})")
 
     emp_id = str(uuid.uuid4())
     ns = get_next_name(conn, "foodclaw_employee", company_id=args.company_id)
     now = _now_iso()
-    full_name = f"{first_name} {last_name}"
 
     hourly_rate = getattr(args, "hourly_rate", None) or "0.00"
     to_decimal(hourly_rate)
 
     conn.execute("""
         INSERT INTO foodclaw_employee (id, naming_series, company_id, employee_id,
-            first_name, last_name, full_name, role, hourly_rate, phone, email,
-            hire_date, status, certifications, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            role, hourly_rate, status, certifications, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
     """, (
         emp_id, ns, args.company_id,
-        getattr(args, "employee_id", None),
-        first_name, last_name, full_name,
+        core_emp_id,
         getattr(args, "role", None) or "staff",
         hourly_rate,
-        getattr(args, "phone", None),
-        getattr(args, "email", None),
-        getattr(args, "hire_date", None),
         "active",
         getattr(args, "certifications", None),
         now, now,
     ))
     audit(conn, "foodclaw_employee", emp_id, "food-add-employee", args.company_id)
     conn.commit()
-    ok({"id": emp_id, "naming_series": ns, "full_name": full_name, "role": getattr(args, "role", None) or "staff"})
+    ok({"id": emp_id, "naming_series": ns, "employee_id": core_emp_id,
+        "full_name": row[1], "role": getattr(args, "role", None) or "staff"})
 
 
 # ---------------------------------------------------------------------------
@@ -96,15 +96,13 @@ def update_employee(conn, args):
         err("--foodclaw-employee-id is required")
     row = conn.execute("SELECT id FROM foodclaw_employee WHERE id = ?", (emp_id,)).fetchone()
     if not row:
-        err(f"Employee {emp_id} not found")
+        err(f"FoodClaw employee {emp_id} not found")
     _validate_enum(getattr(args, "role", None), VALID_ROLES, "role")
     _validate_enum(getattr(args, "emp_status", None), VALID_EMP_STATUSES, "status")
 
     updates, params = [], []
     for field, col in [
-        ("first_name", "first_name"), ("last_name", "last_name"),
-        ("role", "role"), ("phone", "phone"), ("email", "email"),
-        ("hire_date", "hire_date"), ("certifications", "certifications"),
+        ("role", "role"), ("certifications", "certifications"),
     ]:
         val = getattr(args, field, None)
         if val is not None:
@@ -121,15 +119,6 @@ def update_employee(conn, args):
         updates.append("hourly_rate = ?")
         params.append(hr)
 
-    # Recalculate full_name if first/last changed
-    fn = getattr(args, "first_name", None)
-    ln = getattr(args, "last_name", None)
-    if fn or ln:
-        cur = conn.execute("SELECT first_name, last_name FROM foodclaw_employee WHERE id = ?", (emp_id,)).fetchone()
-        full = f"{fn or cur[0]} {ln or cur[1]}"
-        updates.append("full_name = ?")
-        params.append(full)
-
     if not updates:
         err("No fields to update")
 
@@ -140,7 +129,7 @@ def update_employee(conn, args):
     conn.execute(f"UPDATE foodclaw_employee SET {', '.join(updates)} WHERE id = ?", params)
     audit(conn, "foodclaw_employee", emp_id, "food-update-employee", None)
     conn.commit()
-    ok({"id": emp_id, "updated_fields": [u.split(" = ")[0] for u in updates if u not in ("updated_at = ?", "full_name = ?")]})
+    ok({"id": emp_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
 
 # ---------------------------------------------------------------------------
@@ -149,25 +138,41 @@ def update_employee(conn, args):
 def list_employees(conn, args):
     where, params = ["1=1"], []
     if getattr(args, "company_id", None):
-        where.append("company_id = ?")
+        where.append("fe.company_id = ?")
         params.append(args.company_id)
     if getattr(args, "role", None):
-        where.append("role = ?")
+        where.append("fe.role = ?")
         params.append(args.role)
     if getattr(args, "emp_status", None):
-        where.append("status = ?")
+        where.append("fe.status = ?")
         params.append(args.emp_status)
     if getattr(args, "search", None):
-        where.append("(first_name LIKE ? OR last_name LIKE ? OR full_name LIKE ?)")
+        where.append("(e.first_name LIKE ? OR e.last_name LIKE ? OR e.full_name LIKE ?)")
         params.extend([f"%{args.search}%"] * 3)
 
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM foodclaw_employee WHERE {' AND '.join(where)}", params
-    ).fetchone()[0]
-    rows = conn.execute(
-        f"SELECT * FROM foodclaw_employee WHERE {' AND '.join(where)} ORDER BY full_name LIMIT ? OFFSET ?",
-        params + [getattr(args, "limit", 50), getattr(args, "offset", 0)]
-    ).fetchall()
+    w = ' AND '.join(where)
+
+    total = conn.execute(f"""
+        SELECT COUNT(*)
+        FROM foodclaw_employee fe
+        JOIN employee e ON fe.employee_id = e.id
+        WHERE {w}
+    """, params).fetchone()[0]
+
+    rows = conn.execute(f"""
+        SELECT fe.id, fe.naming_series, fe.company_id, fe.employee_id,
+               e.first_name, e.last_name, e.full_name,
+               fe.role, fe.hourly_rate,
+               e.cell_phone AS phone, e.personal_email AS email,
+               e.date_of_joining AS hire_date,
+               fe.status, fe.certifications,
+               fe.created_at, fe.updated_at
+        FROM foodclaw_employee fe
+        JOIN employee e ON fe.employee_id = e.id
+        WHERE {w}
+        ORDER BY e.full_name
+        LIMIT ? OFFSET ?
+    """, params + [getattr(args, "limit", 50), getattr(args, "offset", 0)]).fetchall()
     ok({"items": [row_to_dict(r) for r in rows], "total_count": total})
 
 

@@ -2,7 +2,7 @@
 """FoodClaw — db_query.py (unified router)
 
 AI-native restaurant & food service management.
-Routes all actions across 7 domain modules: menu, recipes, inventory, staff, catering, food_safety, reports.
+Routes all actions across 8 domain modules: menu, recipes, inventory, staff, catering, food_safety, franchise, reports.
 
 Usage: python3 db_query.py --action <action-name> [--flags ...]
 Output: JSON to stdout, exit 0 on success, exit 1 on error.
@@ -37,6 +37,7 @@ from inventory import ACTIONS as INVENTORY_ACTIONS
 from staff import ACTIONS as STAFF_ACTIONS
 from catering import ACTIONS as CATERING_ACTIONS
 from food_safety import ACTIONS as FOOD_SAFETY_ACTIONS
+from franchise import ACTIONS as FRANCHISE_ACTIONS
 from reports import ACTIONS as REPORTS_ACTIONS
 
 # ---------------------------------------------------------------------------
@@ -52,12 +53,13 @@ ACTIONS.update(INVENTORY_ACTIONS)
 ACTIONS.update(STAFF_ACTIONS)
 ACTIONS.update(CATERING_ACTIONS)
 ACTIONS.update(FOOD_SAFETY_ACTIONS)
+ACTIONS.update(FRANCHISE_ACTIONS)
 ACTIONS.update(REPORTS_ACTIONS)
 ACTIONS["status"] = lambda conn, args: ok({
     "skill": SKILL,
-    "version": "1.0.0",
+    "version": "1.1.0",
     "actions_available": len([k for k in ACTIONS if k != "status"]),
-    "domains": ["menu", "recipes", "inventory", "staff", "catering", "food_safety", "reports"],
+    "domains": ["menu", "recipes", "inventory", "staff", "catering", "food_safety", "franchise", "reports"],
     "database": DEFAULT_DB_PATH,
 })
 
@@ -128,6 +130,7 @@ def main():
     parser.add_argument("--par-level")
     parser.add_argument("--current-stock")
     parser.add_argument("--supplier")
+    parser.add_argument("--supplier-id")
     parser.add_argument("--is-perishable")
     parser.add_argument("--expiry-date")
     parser.add_argument("--reorder-point")
@@ -147,15 +150,12 @@ def main():
     parser.add_argument("--items-json")
 
     # ── STAFF domain ──────────────────────────────────────────────
-    parser.add_argument("--first-name")
-    parser.add_argument("--last-name")
+    # foodclaw_employee is an extension table — name/email/phone/hire_date
+    # come from the core employee table via JOIN
     parser.add_argument("--foodclaw-employee-id")
     parser.add_argument("--employee-id")
     parser.add_argument("--role")
     parser.add_argument("--hourly-rate")
-    parser.add_argument("--phone")
-    parser.add_argument("--email")
-    parser.add_argument("--hire-date")
     parser.add_argument("--emp-status")
     parser.add_argument("--certifications")
     parser.add_argument("--shift-id")
@@ -184,8 +184,13 @@ def main():
     parser.add_argument("--estimated-cost")
     parser.add_argument("--quoted-price")
     parser.add_argument("--deposit-amount")
+    parser.add_argument("--final-amount")
     parser.add_argument("--unit-price")
     parser.add_argument("--requirement")
+    # GL account configuration (catering + franchise)
+    parser.add_argument("--revenue-account-id")
+    parser.add_argument("--receivable-account-id")
+    parser.add_argument("--cost-center-id")
 
     # ── FOOD SAFETY domain ───────────────────────────────────────
     parser.add_argument("--ccp-name")
@@ -217,6 +222,28 @@ def main():
     parser.add_argument("--corrective-actions")
     parser.add_argument("--follow-up-date")
     parser.add_argument("--inspection-status")
+
+    # ── FRANCHISE domain ────────────────────────────────────────
+    parser.add_argument("--franchise-unit-id")
+    parser.add_argument("--unit-code")
+    parser.add_argument("--address")
+    parser.add_argument("--city")
+    parser.add_argument("--state")
+    parser.add_argument("--zip-code")
+    parser.add_argument("--manager-name")
+    parser.add_argument("--phone")
+    parser.add_argument("--open-date")
+    parser.add_argument("--royalty-id")
+    parser.add_argument("--period-start")
+    parser.add_argument("--period-end")
+    parser.add_argument("--gross-revenue")
+    parser.add_argument("--royalty-rate")
+    parser.add_argument("--royalty-amount")
+    parser.add_argument("--marketing-fee")
+    parser.add_argument("--payment-status")
+    parser.add_argument("--royalty-income-account-id")
+    parser.add_argument("--royalty-receivable-account-id")
+    parser.add_argument("--marketing-expense-account-id")
 
     # ── REPORTS domain ───────────────────────────────────────────
     parser.add_argument("--start-date")

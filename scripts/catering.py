@@ -1,6 +1,6 @@
 """FoodClaw — catering domain module
 
-Actions for the catering domain (3 tables, 10 actions).
+Actions for the catering domain (3 tables, 11 actions).
 Imported by db_query.py (unified router).
 """
 import json
@@ -21,6 +21,13 @@ try:
     ENTITY_PREFIXES.setdefault("foodclaw_catering_event", "CATER-")
 except ImportError:
     pass
+
+# GL posting — optional integration (graceful degradation)
+try:
+    from erpclaw_lib.gl_posting import insert_gl_entries
+    HAS_GL = True
+except ImportError:
+    HAS_GL = False
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -124,10 +131,17 @@ def update_catering_event(conn, args):
         updates.append("guest_count = ?")
         params.append(int(gc))
 
-    for field in ("estimated_cost", "quoted_price", "deposit_amount"):
+    for field in ("estimated_cost", "quoted_price", "deposit_amount", "final_amount"):
         val = getattr(args, field, None)
         if val is not None:
             to_decimal(val)
+            updates.append(f"{field} = ?")
+            params.append(val)
+
+    # GL account configuration fields
+    for field in ("revenue_account_id", "receivable_account_id", "cost_center_id"):
+        val = getattr(args, field, None)
+        if val is not None:
             updates.append(f"{field} = ?")
             params.append(val)
 
@@ -303,7 +317,127 @@ def confirm_event(conn, args):
 
 
 # ---------------------------------------------------------------------------
-# 10. catering-cost-estimate
+# 10. complete-catering-event (with GL posting for revenue recognition)
+# ---------------------------------------------------------------------------
+def complete_catering_event(conn, args):
+    """Complete a catering event and optionally post GL entries for revenue recognition.
+
+    GL pattern for catering revenue:
+      DR: Accounts Receivable (receivable_account_id) — party_type=Customer if applicable
+      CR: Food Service Revenue (revenue_account_id)
+
+    GL posting is OPTIONAL. If GL accounts are not configured on the event,
+    the event is still marked completed without GL entries.
+    """
+    event_id = getattr(args, "event_id", None)
+    _validate_event(conn, event_id)
+
+    row = conn.execute(
+        "SELECT * FROM foodclaw_catering_event WHERE id = ?", (event_id,)
+    ).fetchone()
+    event = row_to_dict(row)
+
+    if event["event_status"] not in ("confirmed", "in_progress"):
+        err(f"Cannot complete: event status is '{event['event_status']}', "
+            "expected 'confirmed' or 'in_progress'")
+
+    # Determine revenue amount: use final_amount if set, otherwise quoted_price,
+    # otherwise sum of catering items
+    final_amount = getattr(args, "final_amount", None)
+    if final_amount:
+        to_decimal(final_amount)
+    elif event.get("final_amount") and to_decimal(event["final_amount"]) > Decimal("0"):
+        final_amount = event["final_amount"]
+    elif event.get("quoted_price") and to_decimal(event["quoted_price"]) > Decimal("0"):
+        final_amount = event["quoted_price"]
+    else:
+        # Sum catering items
+        items_total = conn.execute(
+            "SELECT COALESCE(SUM(CAST(line_total AS REAL)), 0) FROM foodclaw_catering_item WHERE event_id = ?",
+            (event_id,)
+        ).fetchone()[0]
+        final_amount = str(to_decimal(str(items_total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+    revenue_amount = to_decimal(final_amount)
+    if revenue_amount <= Decimal("0"):
+        err("Cannot complete event with zero or negative revenue amount")
+
+    now = _now_iso()
+    gl_entry_ids_str = None
+    gl_posted = False
+
+    # Resolve GL account IDs: prefer args, fall back to event record
+    revenue_account_id = getattr(args, "revenue_account_id", None) or event.get("revenue_account_id")
+    receivable_account_id = getattr(args, "receivable_account_id", None) or event.get("receivable_account_id")
+    cost_center_id = getattr(args, "cost_center_id", None) or event.get("cost_center_id")
+
+    # GL posting — optional, requires both accounts + HAS_GL
+    if HAS_GL and revenue_account_id and receivable_account_id:
+        posting_date = event.get("event_date", now[:10])
+
+        entries = [
+            {
+                "account_id": receivable_account_id,
+                "debit": str(revenue_amount),
+                "credit": "0",
+                "party_type": "customer",
+                "party_id": event.get("client_name"),  # catering uses client_name as party
+            },
+            {
+                "account_id": revenue_account_id,
+                "debit": "0",
+                "credit": str(revenue_amount),
+                "cost_center_id": cost_center_id,
+            },
+        ]
+
+        try:
+            gl_ids = insert_gl_entries(
+                conn, entries,
+                voucher_type="Catering Revenue",
+                voucher_id=event_id,
+                posting_date=posting_date,
+                company_id=event["company_id"],
+                remarks=f"Catering revenue for event: {event.get('event_name', '')}",
+            )
+            gl_entry_ids_str = ",".join(gl_ids)
+            gl_posted = True
+        except (ValueError, Exception) as e:
+            # GL posting failed — log warning but still complete the event
+            import sys as _sys
+            _sys.stderr.write(f"[foodclaw] GL posting warning for catering event {event_id}: {e}\n")
+
+    # Update event to completed
+    conn.execute("""
+        UPDATE foodclaw_catering_event
+        SET event_status = 'completed',
+            final_amount = ?,
+            revenue_account_id = ?,
+            receivable_account_id = ?,
+            cost_center_id = ?,
+            gl_entry_ids = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (
+        str(revenue_amount), revenue_account_id, receivable_account_id,
+        cost_center_id, gl_entry_ids_str, now, event_id,
+    ))
+    audit(conn, "foodclaw_catering_event", event_id, "food-complete-catering-event", event["company_id"])
+    conn.commit()
+
+    result = {
+        "id": event_id,
+        "event_status": "completed",
+        "final_amount": str(revenue_amount),
+        "gl_posted": gl_posted,
+    }
+    if gl_entry_ids_str:
+        result["gl_entry_ids"] = gl_entry_ids_str
+    ok(result)
+
+
+# ---------------------------------------------------------------------------
+# 11. catering-cost-estimate
 # ---------------------------------------------------------------------------
 def catering_cost_estimate(conn, args):
     """Sum all catering items line_total for an event."""
@@ -353,5 +487,6 @@ ACTIONS = {
     "food-add-dietary-requirement": add_dietary_requirement,
     "food-list-dietary-requirements": list_dietary_requirements,
     "food-confirm-event": confirm_event,
+    "food-complete-catering-event": complete_catering_event,
     "food-catering-cost-estimate": catering_cost_estimate,
 }

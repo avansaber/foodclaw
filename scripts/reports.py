@@ -93,14 +93,14 @@ def labor_report(conn, args):
         params_s.append(args.end_date)
 
     rows = conn.execute(f"""
-        SELECT e.role,
-               COUNT(DISTINCT e.id) as employee_count,
+        SELECT fe.role,
+               COUNT(DISTINCT fe.id) as employee_count,
                SUM(CAST(s.hours_worked AS REAL)) as total_hours,
-               SUM(CAST(s.hours_worked AS REAL) * CAST(e.hourly_rate AS REAL)) as total_cost
+               SUM(CAST(s.hours_worked AS REAL) * CAST(fe.hourly_rate AS REAL)) as total_cost
         FROM foodclaw_shift s
-        JOIN foodclaw_employee e ON s.employee_id = e.id
+        JOIN foodclaw_employee fe ON s.employee_id = fe.id
         WHERE {' AND '.join(where_s)}
-        GROUP BY e.role
+        GROUP BY fe.role
         ORDER BY total_cost DESC
     """, params_s).fetchall()
 

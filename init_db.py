@@ -233,7 +233,7 @@ def init_foodclaw_schema(db_path=None):
             id              TEXT PRIMARY KEY,
             naming_series   TEXT,
             company_id      TEXT NOT NULL,
-            supplier        TEXT NOT NULL,
+            supplier_id     TEXT NOT NULL REFERENCES supplier(id),
             order_date      TEXT NOT NULL,
             expected_date   TEXT,
             total_amount    TEXT DEFAULT '0.00',
@@ -254,16 +254,10 @@ def init_foodclaw_schema(db_path=None):
             id              TEXT PRIMARY KEY,
             naming_series   TEXT,
             company_id      TEXT NOT NULL,
-            employee_id     TEXT,
-            first_name      TEXT NOT NULL,
-            last_name       TEXT NOT NULL,
-            full_name       TEXT,
+            employee_id     TEXT NOT NULL REFERENCES employee(id),
             role            TEXT DEFAULT 'staff'
                             CHECK (role IN ('manager','chef','sous_chef','line_cook','prep_cook','server','bartender','host','busser','dishwasher','delivery','cashier','staff','other')),
             hourly_rate     TEXT DEFAULT '0.00',
-            phone           TEXT,
-            email           TEXT,
-            hire_date       TEXT,
             status          TEXT DEFAULT 'active'
                             CHECK (status IN ('active','inactive','terminated')),
             certifications  TEXT,
@@ -272,6 +266,7 @@ def init_foodclaw_schema(db_path=None):
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_employee_company ON foodclaw_employee(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_employee_role ON foodclaw_employee(role);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_foodclaw_employee_empid ON foodclaw_employee(employee_id);
 
         CREATE TABLE IF NOT EXISTS foodclaw_shift (
             id              TEXT PRIMARY KEY,
@@ -330,6 +325,11 @@ def init_foodclaw_schema(db_path=None):
             estimated_cost  TEXT DEFAULT '0.00',
             quoted_price    TEXT DEFAULT '0.00',
             deposit_amount  TEXT DEFAULT '0.00',
+            final_amount    TEXT DEFAULT '0.00',
+            revenue_account_id      TEXT,
+            receivable_account_id   TEXT,
+            cost_center_id          TEXT,
+            gl_entry_ids    TEXT,
             notes           TEXT,
             created_at      TEXT DEFAULT (datetime('now')),
             updated_at      TEXT DEFAULT (datetime('now'))
@@ -449,6 +449,7 @@ def init_foodclaw_schema(db_path=None):
 
         CREATE TABLE IF NOT EXISTS foodclaw_royalty_entry (
             id              TEXT PRIMARY KEY,
+            naming_series   TEXT,
             company_id      TEXT NOT NULL,
             franchise_unit_id TEXT NOT NULL,
             period_start    TEXT NOT NULL,
@@ -460,6 +461,11 @@ def init_foodclaw_schema(db_path=None):
             total_due       TEXT DEFAULT '0.00',
             payment_status  TEXT DEFAULT 'pending'
                             CHECK (payment_status IN ('pending','paid','overdue')),
+            royalty_income_account_id   TEXT,
+            royalty_receivable_account_id TEXT,
+            marketing_expense_account_id TEXT,
+            cost_center_id              TEXT,
+            gl_entry_ids    TEXT,
             notes           TEXT,
             created_at      TEXT DEFAULT (datetime('now'))
         );

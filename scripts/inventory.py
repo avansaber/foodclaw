@@ -326,9 +326,13 @@ def list_waste_logs(conn, args):
 # ---------------------------------------------------------------------------
 def add_purchase_order(conn, args):
     _validate_company(conn, args.company_id)
-    supplier = getattr(args, "supplier", None)
-    if not supplier:
-        err("--supplier is required")
+    supplier_id = getattr(args, "supplier_id", None)
+    if not supplier_id:
+        err("--supplier-id is required")
+    # Validate supplier FK against core supplier table
+    sup_row = conn.execute("SELECT id, name FROM supplier WHERE id = ?", (supplier_id,)).fetchone()
+    if not sup_row:
+        err(f"Supplier {supplier_id} not found in core supplier table")
     order_date = getattr(args, "order_date", None)
     if not order_date:
         err("--order-date is required")
@@ -341,12 +345,12 @@ def add_purchase_order(conn, args):
     now = _now_iso()
 
     conn.execute("""
-        INSERT INTO foodclaw_purchase_order (id, naming_series, company_id, supplier,
+        INSERT INTO foodclaw_purchase_order (id, naming_series, company_id, supplier_id,
             order_date, expected_date, total_amount, order_status, notes, items_json,
             created_at, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
-        po_id, ns, args.company_id, supplier,
+        po_id, ns, args.company_id, supplier_id,
         order_date,
         getattr(args, "expected_date", None),
         total_amount,
@@ -357,7 +361,7 @@ def add_purchase_order(conn, args):
     ))
     audit(conn, "foodclaw_purchase_order", po_id, "food-add-purchase-order", args.company_id)
     conn.commit()
-    ok({"id": po_id, "naming_series": ns, "supplier": supplier, "order_status": "draft", "total_amount": total_amount})
+    ok({"id": po_id, "naming_series": ns, "supplier_id": supplier_id, "supplier_name": sup_row[1], "order_status": "draft", "total_amount": total_amount})
 
 
 # ---------------------------------------------------------------------------
@@ -366,21 +370,26 @@ def add_purchase_order(conn, args):
 def list_purchase_orders(conn, args):
     where, params = ["1=1"], []
     if getattr(args, "company_id", None):
-        where.append("company_id = ?")
+        where.append("po.company_id = ?")
         params.append(args.company_id)
     if getattr(args, "order_status", None):
         _validate_enum(args.order_status, VALID_PO_STATUSES, "order-status")
-        where.append("order_status = ?")
+        where.append("po.order_status = ?")
         params.append(args.order_status)
     if getattr(args, "search", None):
-        where.append("supplier LIKE ?")
+        where.append("s.name LIKE ?")
         params.append(f"%{args.search}%")
 
+    where_sql = " AND ".join(where)
     total = conn.execute(
-        f"SELECT COUNT(*) FROM foodclaw_purchase_order WHERE {' AND '.join(where)}", params
+        f"SELECT COUNT(*) FROM foodclaw_purchase_order po LEFT JOIN supplier s ON po.supplier_id = s.id WHERE {where_sql}", params
     ).fetchone()[0]
     rows = conn.execute(
-        f"SELECT * FROM foodclaw_purchase_order WHERE {' AND '.join(where)} ORDER BY order_date DESC LIMIT ? OFFSET ?",
+        f"""SELECT po.*, s.name AS supplier_name
+            FROM foodclaw_purchase_order po
+            LEFT JOIN supplier s ON po.supplier_id = s.id
+            WHERE {where_sql}
+            ORDER BY po.order_date DESC LIMIT ? OFFSET ?""",
         params + [getattr(args, "limit", 50), getattr(args, "offset", 0)]
     ).fetchall()
     ok({"items": [row_to_dict(r) for r in rows], "total_count": total})

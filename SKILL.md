@@ -2,12 +2,12 @@
 name: foodclaw
 version: 1.0.0
 description: Restaurant & Food Service Management -- menus, recipe costing, F&B inventory, staff scheduling, catering, HACCP food safety, franchise management. 71 actions across 7 domains. Built on ERPClaw foundation.
-author: AvanSaber / Nikhil Jathar
-homepage: https://www.foodclaw.ai
+author: AvanSaber
+homepage: https://github.com/avansaber/foodclaw
 source: https://github.com/avansaber/foodclaw
 tier: 4
 category: food-service
-requires: [erpclaw-setup]
+requires: [erpclaw]
 database: ~/.openclaw/erpclaw/data.sqlite
 user-invocable: true
 tags: [foodclaw, restaurant, food-service, menu, recipe, costing, inventory, staff, scheduling, catering, haccp, food-safety, inspection, franchise, kitchen]
@@ -28,7 +28,7 @@ and multi-unit franchise comparison.
 
 - **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
 - **No external API calls**: Zero network calls in any code path
-- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw)
 - **SQL injection safe**: All queries use parameterized statements
 
 ### Skill Activation Triggers
@@ -42,7 +42,7 @@ franchise, royalty, waste, par level, inventory count, purchase order, food serv
 
 If the database does not exist or you see "no such table" errors:
 ```
-python3 {baseDir}/../erpclaw-setup/scripts/db_query.py --action initialize-database
+python3 {baseDir}/../erpclaw/scripts/erpclaw-setup/db_query.py --action initialize-database
 python3 {baseDir}/init_db.py
 python3 {baseDir}/scripts/db_query.py --action status
 ```
@@ -68,9 +68,9 @@ python3 {baseDir}/scripts/db_query.py --action status
 --action food-par-level-alert --company-id {id}
 ```
 
-**4. Schedule staff:**
+**4. Schedule staff (requires existing core employee):**
 ```
---action food-add-employee --company-id {id} --first-name "Maria" --last-name "Garcia" --role server --hourly-rate "15.00"
+--action food-add-employee --company-id {id} --employee-id {core_employee_id} --role server --hourly-rate "15.00"
 --action food-add-shift --company-id {id} --foodclaw-employee-id {id} --shift-date "2026-03-07" --start-time "16:00" --end-time "23:00"
 --action food-clock-in --shift-id {id}
 ```
@@ -120,7 +120,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `food-list-stock-counts` | | `--company-id --ingredient-id --limit --offset` |
 | `food-add-waste-log` | `--company-id --item-name --waste-date` | `--ingredient-id --quantity --unit --waste-reason --waste-cost --logged-by --notes` |
 | `food-list-waste-logs` | | `--company-id --ingredient-id --waste-reason --limit --offset` |
-| `food-add-purchase-order` | `--company-id --supplier --order-date` | `--expected-date --total-amount --notes --items-json` |
+| `food-add-purchase-order` | `--company-id --supplier-id --order-date` | `--expected-date --total-amount --notes --items-json` |
 | `food-list-purchase-orders` | | `--company-id --order-status --search --limit --offset` |
 | `food-par-level-alert` | | `--company-id` |
 | `food-inventory-valuation` | | `--company-id` |
@@ -128,8 +128,8 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 ### Staff (10 actions)
 | Action | Required Flags | Optional Flags |
 |--------|---------------|----------------|
-| `food-add-employee` | `--company-id --first-name --last-name` | `--role --hourly-rate --phone --email --hire-date --certifications` |
-| `food-update-employee` | `--foodclaw-employee-id` | `--first-name --last-name --role --hourly-rate --emp-status --phone --email --certifications` |
+| `food-add-employee` | `--company-id --employee-id` | `--role --hourly-rate --certifications` |
+| `food-update-employee` | `--foodclaw-employee-id` | `--role --hourly-rate --emp-status --certifications` |
 | `food-list-employees` | | `--company-id --role --emp-status --search --limit --offset` |
 | `food-add-shift` | `--company-id --foodclaw-employee-id --shift-date --start-time` | `--end-time --role-assigned --notes` |
 | `food-update-shift` | `--shift-id` | `--shift-date --start-time --end-time --role-assigned --shift-status --break-minutes --notes` |

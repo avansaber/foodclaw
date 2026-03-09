@@ -212,7 +212,14 @@ def add_recipe_ingredient(conn, args):
             err(f"Ingredient {ing_id} not found")
 
     qty = getattr(args, "quantity", None) or "0"
-    unit_cost = getattr(args, "unit_cost", None) or "0.00"
+    unit_cost = getattr(args, "unit_cost", None)
+    # Inherit cost from ingredient master if not explicitly provided
+    if not unit_cost and ing_id:
+        ing_row = conn.execute("SELECT unit_cost FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+        if ing_row and ing_row["unit_cost"]:
+            unit_cost = ing_row["unit_cost"]
+    if not unit_cost:
+        unit_cost = "0.00"
     to_decimal(qty)
     to_decimal(unit_cost)
     line_cost = str(to_decimal(qty) * to_decimal(unit_cost))
