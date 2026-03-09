@@ -94,7 +94,7 @@ def update_ingredient(conn, args):
     ing_id = getattr(args, "ingredient_id", None)
     if not ing_id:
         err("--ingredient-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+    row = conn.execute("SELECT id, company_id FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
     if not row:
         err(f"Ingredient {ing_id} not found")
     _validate_enum(getattr(args, "ingredient_category", None), VALID_INGREDIENT_CATEGORIES, "category")
@@ -139,7 +139,7 @@ def update_ingredient(conn, args):
     params.append(ing_id)
 
     conn.execute(f"UPDATE foodclaw_ingredient SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_ingredient", ing_id, "food-update-ingredient", None)
+    audit(conn, "foodclaw_ingredient", ing_id, "food-update-ingredient", row["company_id"])
     conn.commit()
     ok({"id": ing_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
