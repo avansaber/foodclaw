@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_inspection", "INSP-")
 except ImportError:
@@ -31,7 +32,7 @@ VALID_INSPECTION_STATUSES = ("scheduled", "in_progress", "completed", "failed", 
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -242,7 +243,7 @@ def update_inspection(conn, args):
     insp_id = getattr(args, "inspection_id", None)
     if not insp_id:
         err("--inspection-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_inspection WHERE id = ?", (insp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_inspection")).select(Field("id")).where(Field("id") == P()).get_sql(), (insp_id,)).fetchone()
     if not row:
         err(f"Inspection {insp_id} not found")
     _validate_enum(getattr(args, "inspection_type", None), VALID_INSPECTION_TYPES, "inspection-type")
@@ -313,7 +314,7 @@ def complete_inspection(conn, args):
     insp_id = getattr(args, "inspection_id", None)
     if not insp_id:
         err("--inspection-id is required")
-    row = conn.execute("SELECT id, inspection_status FROM foodclaw_inspection WHERE id = ?", (insp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_inspection")).select(Field("id"), Field("inspection_status")).where(Field("id") == P()).get_sql(), (insp_id,)).fetchone()
     if not row:
         err(f"Inspection {insp_id} not found")
     if row[1] in ("completed", "failed"):

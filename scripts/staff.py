@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_employee", "FEMP-")
 except ImportError:
@@ -33,7 +34,7 @@ VALID_SHIFT_STATUSES = ("scheduled", "clocked_in", "clocked_out", "no_show", "ca
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -51,13 +52,13 @@ def add_employee(conn, args):
     core_emp_id = getattr(args, "employee_id", None)
     if not core_emp_id:
         err("--employee-id is required (must reference a core employee record)")
-    row = conn.execute("SELECT id, full_name FROM employee WHERE id = ?", (core_emp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("employee")).select(Field("id"), Field("full_name")).where(Field("id") == P()).get_sql(), (core_emp_id,)).fetchone()
     if not row:
         err(f"Core employee {core_emp_id} not found. Create the employee in erpclaw-hr first.")
     _validate_enum(getattr(args, "role", None), VALID_ROLES, "role")
 
     # Check for duplicate extension record
-    dup = conn.execute("SELECT id FROM foodclaw_employee WHERE employee_id = ?", (core_emp_id,)).fetchone()
+    dup = conn.execute(Q.from_(Table("foodclaw_employee")).select(Field("id")).where(Field("employee_id") == P()).get_sql(), (core_emp_id,)).fetchone()
     if dup:
         err(f"FoodClaw extension already exists for employee {core_emp_id} (foodclaw_employee.id={dup[0]})")
 
@@ -94,7 +95,7 @@ def update_employee(conn, args):
     emp_id = getattr(args, "foodclaw_employee_id", None)
     if not emp_id:
         err("--foodclaw-employee-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_employee WHERE id = ?", (emp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_employee")).select(Field("id")).where(Field("id") == P()).get_sql(), (emp_id,)).fetchone()
     if not row:
         err(f"FoodClaw employee {emp_id} not found")
     _validate_enum(getattr(args, "role", None), VALID_ROLES, "role")
@@ -184,7 +185,7 @@ def add_shift(conn, args):
     emp_id = getattr(args, "foodclaw_employee_id", None)
     if not emp_id:
         err("--foodclaw-employee-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_employee WHERE id = ?", (emp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_employee")).select(Field("id")).where(Field("id") == P()).get_sql(), (emp_id,)).fetchone()
     if not row:
         err(f"Employee {emp_id} not found")
 
@@ -223,7 +224,7 @@ def update_shift(conn, args):
     shift_id = getattr(args, "shift_id", None)
     if not shift_id:
         err("--shift-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_shift WHERE id = ?", (shift_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_shift")).select(Field("id")).where(Field("id") == P()).get_sql(), (shift_id,)).fetchone()
     if not row:
         err(f"Shift {shift_id} not found")
     _validate_enum(getattr(args, "shift_status", None), VALID_SHIFT_STATUSES, "shift-status")
@@ -292,7 +293,7 @@ def clock_in(conn, args):
     shift_id = getattr(args, "shift_id", None)
     if not shift_id:
         err("--shift-id is required")
-    row = conn.execute("SELECT id, shift_status FROM foodclaw_shift WHERE id = ?", (shift_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_shift")).select(Field("id"), Field("shift_status")).where(Field("id") == P()).get_sql(), (shift_id,)).fetchone()
     if not row:
         err(f"Shift {shift_id} not found")
     if row[1] != "scheduled":
@@ -315,8 +316,7 @@ def clock_out(conn, args):
     shift_id = getattr(args, "shift_id", None)
     if not shift_id:
         err("--shift-id is required")
-    row = conn.execute("SELECT id, shift_status, clock_in_time, break_minutes FROM foodclaw_shift WHERE id = ?",
-                       (shift_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_shift")).select(Field("id"), Field("shift_status"), Field("clock_in_time"), Field("break_minutes")).where(Field("id") == P()).get_sql(), (shift_id,)).fetchone()
     if not row:
         err(f"Shift {shift_id} not found")
     if row[1] != "clocked_in":
@@ -353,7 +353,7 @@ def add_tip_distribution(conn, args):
     emp_id = getattr(args, "foodclaw_employee_id", None)
     if not emp_id:
         err("--foodclaw-employee-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_employee WHERE id = ?", (emp_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_employee")).select(Field("id")).where(Field("id") == P()).get_sql(), (emp_id,)).fetchone()
     if not row:
         err(f"Employee {emp_id} not found")
 

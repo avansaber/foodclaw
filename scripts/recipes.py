@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_recipe", "RCP-")
 except ImportError:
@@ -28,7 +29,7 @@ _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -48,7 +49,7 @@ def add_recipe(conn, args):
     # Validate menu_item_id FK if provided
     mi_id = getattr(args, "menu_item_id", None)
     if mi_id:
-        row = conn.execute("SELECT id FROM foodclaw_menu_item WHERE id = ?", (mi_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("foodclaw_menu_item")).select(Field("id")).where(Field("id") == P()).get_sql(), (mi_id,)).fetchone()
         if not row:
             err(f"Menu item {mi_id} not found")
 
@@ -93,7 +94,7 @@ def update_recipe(conn, args):
     recipe_id = getattr(args, "recipe_id", None)
     if not recipe_id:
         err("--recipe-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_recipe WHERE id = ?", (recipe_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_recipe")).select(Field("id")).where(Field("id") == P()).get_sql(), (recipe_id,)).fetchone()
     if not row:
         err(f"Recipe {recipe_id} not found")
 
@@ -146,7 +147,7 @@ def get_recipe(conn, args):
     recipe_id = getattr(args, "recipe_id", None)
     if not recipe_id:
         err("--recipe-id is required")
-    row = conn.execute("SELECT * FROM foodclaw_recipe WHERE id = ?", (recipe_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_recipe")).select(Table("foodclaw_recipe").star).where(Field("id") == P()).get_sql(), (recipe_id,)).fetchone()
     if not row:
         err(f"Recipe {recipe_id} not found")
     data = row_to_dict(row)
@@ -196,7 +197,7 @@ def add_recipe_ingredient(conn, args):
     recipe_id = getattr(args, "recipe_id", None)
     if not recipe_id:
         err("--recipe-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_recipe WHERE id = ?", (recipe_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_recipe")).select(Field("id")).where(Field("id") == P()).get_sql(), (recipe_id,)).fetchone()
     if not row:
         err(f"Recipe {recipe_id} not found")
 
@@ -207,7 +208,7 @@ def add_recipe_ingredient(conn, args):
     # Validate ingredient_id FK if provided
     ing_id = getattr(args, "ingredient_id", None)
     if ing_id:
-        row = conn.execute("SELECT id FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Field("id")).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
         if not row:
             err(f"Ingredient {ing_id} not found")
 
@@ -215,7 +216,7 @@ def add_recipe_ingredient(conn, args):
     unit_cost = getattr(args, "unit_cost", None)
     # Inherit cost from ingredient master if not explicitly provided
     if not unit_cost and ing_id:
-        ing_row = conn.execute("SELECT unit_cost FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+        ing_row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Field("unit_cost")).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
         if ing_row and ing_row["unit_cost"]:
             unit_cost = ing_row["unit_cost"]
     if not unit_cost:
@@ -252,7 +253,7 @@ def update_recipe_ingredient(conn, args):
     ri_id = getattr(args, "recipe_ingredient_id", None)
     if not ri_id:
         err("--recipe-ingredient-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_recipe_ingredient WHERE id = ?", (ri_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_recipe_ingredient")).select(Field("id")).where(Field("id") == P()).get_sql(), (ri_id,)).fetchone()
     if not row:
         err(f"Recipe ingredient {ri_id} not found")
 
@@ -276,7 +277,7 @@ def update_recipe_ingredient(conn, args):
         err("No fields to update")
 
     # Recalculate line_cost if quantity or unit_cost changed
-    cur = conn.execute("SELECT quantity, unit_cost FROM foodclaw_recipe_ingredient WHERE id = ?", (ri_id,)).fetchone()
+    cur = conn.execute(Q.from_(Table("foodclaw_recipe_ingredient")).select(Field("quantity"), Field("unit_cost")).where(Field("id") == P()).get_sql(), (ri_id,)).fetchone()
     new_qty = None
     new_uc = None
     for field, val in [("quantity", getattr(args, "quantity", None)), ("unit_cost", getattr(args, "unit_cost", None))]:
@@ -322,14 +323,12 @@ def calculate_recipe_cost(conn, args):
     recipe_id = getattr(args, "recipe_id", None)
     if not recipe_id:
         err("--recipe-id is required")
-    recipe = conn.execute("SELECT * FROM foodclaw_recipe WHERE id = ?", (recipe_id,)).fetchone()
+    recipe = conn.execute(Q.from_(Table("foodclaw_recipe")).select(Table("foodclaw_recipe").star).where(Field("id") == P()).get_sql(), (recipe_id,)).fetchone()
     if not recipe:
         err(f"Recipe {recipe_id} not found")
     recipe_data = row_to_dict(recipe)
 
-    rows = conn.execute(
-        "SELECT * FROM foodclaw_recipe_ingredient WHERE recipe_id = ?", (recipe_id,)
-    ).fetchall()
+    rows = conn.execute(Q.from_(Table("foodclaw_recipe_ingredient")).select(Table("foodclaw_recipe_ingredient").star).where(Field("recipe_id") == P()).get_sql(), (recipe_id,)).fetchall()
 
     total = Decimal("0.00")
     ingredients = []
@@ -414,7 +413,7 @@ def recipe_scaling(conn, args):
     if not target_portions:
         err("--target-portions is required")
 
-    recipe = conn.execute("SELECT * FROM foodclaw_recipe WHERE id = ?", (recipe_id,)).fetchone()
+    recipe = conn.execute(Q.from_(Table("foodclaw_recipe")).select(Table("foodclaw_recipe").star).where(Field("id") == P()).get_sql(), (recipe_id,)).fetchone()
     if not recipe:
         err(f"Recipe {recipe_id} not found")
     recipe_data = row_to_dict(recipe)

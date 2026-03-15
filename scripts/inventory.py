@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_ingredient", "ING-")
     ENTITY_PREFIXES.setdefault("foodclaw_purchase_order", "FPO-")
@@ -34,7 +35,7 @@ VALID_PO_STATUSES = ("draft", "sent", "received", "partial", "cancelled")
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -94,7 +95,7 @@ def update_ingredient(conn, args):
     ing_id = getattr(args, "ingredient_id", None)
     if not ing_id:
         err("--ingredient-id is required")
-    row = conn.execute("SELECT id, company_id FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Field("id"), Field("company_id")).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
     if not row:
         err(f"Ingredient {ing_id} not found")
     _validate_enum(getattr(args, "ingredient_category", None), VALID_INGREDIENT_CATEGORIES, "category")
@@ -151,7 +152,7 @@ def get_ingredient(conn, args):
     ing_id = getattr(args, "ingredient_id", None)
     if not ing_id:
         err("--ingredient-id is required")
-    row = conn.execute("SELECT * FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Table("foodclaw_ingredient").star).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
     if not row:
         err(f"Ingredient {ing_id} not found")
     ok(row_to_dict(row))
@@ -193,7 +194,7 @@ def add_stock_count(conn, args):
     ing_id = getattr(args, "ingredient_id", None)
     if not ing_id:
         err("--ingredient-id is required")
-    row = conn.execute("SELECT id, current_stock FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Field("id"), Field("current_stock")).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
     if not row:
         err(f"Ingredient {ing_id} not found")
 
@@ -271,7 +272,7 @@ def add_waste_log(conn, args):
     # Validate ingredient_id FK if provided
     ing_id = getattr(args, "ingredient_id", None)
     if ing_id:
-        row = conn.execute("SELECT id FROM foodclaw_ingredient WHERE id = ?", (ing_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("foodclaw_ingredient")).select(Field("id")).where(Field("id") == P()).get_sql(), (ing_id,)).fetchone()
         if not row:
             err(f"Ingredient {ing_id} not found")
 
@@ -330,7 +331,7 @@ def add_purchase_order(conn, args):
     if not supplier_id:
         err("--supplier-id is required")
     # Validate supplier FK against core supplier table
-    sup_row = conn.execute("SELECT id, name FROM supplier WHERE id = ?", (supplier_id,)).fetchone()
+    sup_row = conn.execute(Q.from_(Table("supplier")).select(Field("id"), Field("name")).where(Field("id") == P()).get_sql(), (supplier_id,)).fetchone()
     if not sup_row:
         err(f"Supplier {supplier_id} not found in core supplier table")
     order_date = getattr(args, "order_date", None)

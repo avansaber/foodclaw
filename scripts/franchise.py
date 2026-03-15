@@ -18,6 +18,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_franchise_unit", "FUNIT-")
     ENTITY_PREFIXES.setdefault("foodclaw_royalty_entry", "ROYAL-")
@@ -40,7 +41,7 @@ VALID_PAYMENT_STATUSES = ("pending", "paid", "overdue")
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -53,9 +54,7 @@ def _validate_enum(value, valid_values, field_name):
 def _validate_franchise_unit(conn, unit_id):
     if not unit_id:
         err("--franchise-unit-id is required")
-    row = conn.execute(
-        "SELECT id FROM foodclaw_franchise_unit WHERE id = ?", (unit_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_franchise_unit")).select(Field("id")).where(Field("id") == P()).get_sql(), (unit_id,)).fetchone()
     if not row:
         err(f"Franchise unit {unit_id} not found")
 
@@ -137,9 +136,7 @@ def update_franchise_unit(conn, args):
 def get_franchise_unit(conn, args):
     unit_id = getattr(args, "franchise_unit_id", None)
     _validate_franchise_unit(conn, unit_id)
-    row = conn.execute(
-        "SELECT * FROM foodclaw_franchise_unit WHERE id = ?", (unit_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_franchise_unit")).select(Table("foodclaw_franchise_unit").star).where(Field("id") == P()).get_sql(), (unit_id,)).fetchone()
     data = row_to_dict(row)
 
     # Include royalty summary
@@ -291,10 +288,7 @@ def add_royalty_entry(conn, args):
                 })
 
             # Fetch franchise unit name for remarks
-            unit_row = conn.execute(
-                "SELECT unit_name FROM foodclaw_franchise_unit WHERE id = ?",
-                (franchise_unit_id,)
-            ).fetchone()
+            unit_row = conn.execute(Q.from_(Table("foodclaw_franchise_unit")).select(Field("unit_name")).where(Field("id") == P()).get_sql(), (franchise_unit_id,)).fetchone()
             unit_name = unit_row[0] if unit_row else franchise_unit_id
 
             try:
@@ -410,9 +404,7 @@ def update_royalty_payment_status(conn, args):
     royalty_id = getattr(args, "royalty_id", None)
     if not royalty_id:
         err("--royalty-id is required")
-    row = conn.execute(
-        "SELECT id, payment_status FROM foodclaw_royalty_entry WHERE id = ?", (royalty_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_royalty_entry")).select(Field("id"), Field("payment_status")).where(Field("id") == P()).get_sql(), (royalty_id,)).fetchone()
     if not row:
         err(f"Royalty entry {royalty_id} not found")
 

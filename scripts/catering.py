@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_catering_event", "CATER-")
 except ImportError:
@@ -37,7 +38,7 @@ VALID_EVENT_STATUSES = ("inquiry", "quoted", "confirmed", "in_progress", "comple
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -50,7 +51,7 @@ def _validate_enum(value, valid_values, field_name):
 def _validate_event(conn, event_id):
     if not event_id:
         err("--event-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_catering_event WHERE id = ?", (event_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_catering_event")).select(Field("id")).where(Field("id") == P()).get_sql(), (event_id,)).fetchone()
     if not row:
         err(f"Catering event {event_id} not found")
 
@@ -164,20 +165,16 @@ def update_catering_event(conn, args):
 def get_catering_event(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
-    row = conn.execute("SELECT * FROM foodclaw_catering_event WHERE id = ?", (event_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_catering_event")).select(Table("foodclaw_catering_event").star).where(Field("id") == P()).get_sql(), (event_id,)).fetchone()
     data = row_to_dict(row)
 
     # Get catering items
-    items = conn.execute(
-        "SELECT * FROM foodclaw_catering_item WHERE event_id = ?", (event_id,)
-    ).fetchall()
+    items = conn.execute(Q.from_(Table("foodclaw_catering_item")).select(Table("foodclaw_catering_item").star).where(Field("event_id") == P()).get_sql(), (event_id,)).fetchall()
     data["catering_items"] = [row_to_dict(r) for r in items]
     data["item_count"] = len(items)
 
     # Get dietary requirements
-    diets = conn.execute(
-        "SELECT * FROM foodclaw_dietary_requirement WHERE event_id = ?", (event_id,)
-    ).fetchall()
+    diets = conn.execute(Q.from_(Table("foodclaw_dietary_requirement")).select(Table("foodclaw_dietary_requirement").star).where(Field("event_id") == P()).get_sql(), (event_id,)).fetchall()
     data["dietary_requirements"] = [row_to_dict(r) for r in diets]
 
     ok(data)
@@ -289,9 +286,7 @@ def list_dietary_requirements(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
 
-    rows = conn.execute(
-        "SELECT * FROM foodclaw_dietary_requirement WHERE event_id = ?", (event_id,)
-    ).fetchall()
+    rows = conn.execute(Q.from_(Table("foodclaw_dietary_requirement")).select(Table("foodclaw_dietary_requirement").star).where(Field("event_id") == P()).get_sql(), (event_id,)).fetchall()
     ok({"items": [row_to_dict(r) for r in rows], "total_count": len(rows)})
 
 
@@ -302,7 +297,7 @@ def confirm_event(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
 
-    row = conn.execute("SELECT event_status FROM foodclaw_catering_event WHERE id = ?", (event_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_catering_event")).select(Field("event_status")).where(Field("id") == P()).get_sql(), (event_id,)).fetchone()
     if row[0] not in ("inquiry", "quoted"):
         err(f"Cannot confirm: event status is '{row[0]}', expected 'inquiry' or 'quoted'")
 
@@ -332,9 +327,7 @@ def complete_catering_event(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
 
-    row = conn.execute(
-        "SELECT * FROM foodclaw_catering_event WHERE id = ?", (event_id,)
-    ).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_catering_event")).select(Table("foodclaw_catering_event").star).where(Field("id") == P()).get_sql(), (event_id,)).fetchone()
     event = row_to_dict(row)
 
     if event["event_status"] not in ("confirmed", "in_progress"):
@@ -444,12 +437,10 @@ def catering_cost_estimate(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
 
-    event = conn.execute("SELECT * FROM foodclaw_catering_event WHERE id = ?", (event_id,)).fetchone()
+    event = conn.execute(Q.from_(Table("foodclaw_catering_event")).select(Table("foodclaw_catering_event").star).where(Field("id") == P()).get_sql(), (event_id,)).fetchone()
     event_data = row_to_dict(event)
 
-    items = conn.execute(
-        "SELECT * FROM foodclaw_catering_item WHERE event_id = ?", (event_id,)
-    ).fetchall()
+    items = conn.execute(Q.from_(Table("foodclaw_catering_item")).select(Table("foodclaw_catering_item").star).where(Field("event_id") == P()).get_sql(), (event_id,)).fetchall()
 
     total = Decimal("0.00")
     item_list = []

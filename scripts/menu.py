@@ -17,6 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
 
     ENTITY_PREFIXES.setdefault("foodclaw_menu", "MENU-")
     ENTITY_PREFIXES.setdefault("foodclaw_menu_item", "MI-")
@@ -35,7 +36,7 @@ VALID_ITEM_CATEGORIES = ("appetizer", "entree", "dessert", "beverage", "side", "
 def _validate_company(conn, company_id):
     if not company_id:
         err("--company-id is required")
-    row = conn.execute("SELECT id FROM company WHERE id = ?", (company_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("company")).select(Field("id")).where(Field("id") == P()).get_sql(), (company_id,)).fetchone()
     if not row:
         err(f"Company {company_id} not found")
 
@@ -83,7 +84,7 @@ def update_menu(conn, args):
     menu_id = getattr(args, "menu_id", None)
     if not menu_id:
         err("--menu-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_menu WHERE id = ?", (menu_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_menu")).select(Field("id")).where(Field("id") == P()).get_sql(), (menu_id,)).fetchone()
     if not row:
         err(f"Menu {menu_id} not found")
 
@@ -124,12 +125,12 @@ def get_menu(conn, args):
     menu_id = getattr(args, "menu_id", None)
     if not menu_id:
         err("--menu-id is required")
-    row = conn.execute("SELECT * FROM foodclaw_menu WHERE id = ?", (menu_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_menu")).select(Table("foodclaw_menu").star).where(Field("id") == P()).get_sql(), (menu_id,)).fetchone()
     if not row:
         err(f"Menu {menu_id} not found")
     data = row_to_dict(row)
     # Get item count
-    cnt = conn.execute("SELECT COUNT(*) FROM foodclaw_menu_item WHERE menu_id = ?", (menu_id,)).fetchone()[0]
+    cnt = conn.execute(Q.from_(Table("foodclaw_menu_item")).select(fn.Count("*")).where(Field("menu_id") == P()).get_sql(), (menu_id,)).fetchone()[0]
     data["item_count"] = cnt
     ok(data)
 
@@ -171,7 +172,7 @@ def add_menu_item(conn, args):
     # Validate menu if provided
     menu_id = getattr(args, "menu_id", None)
     if menu_id:
-        row = conn.execute("SELECT id FROM foodclaw_menu WHERE id = ?", (menu_id,)).fetchone()
+        row = conn.execute(Q.from_(Table("foodclaw_menu")).select(Field("id")).where(Field("id") == P()).get_sql(), (menu_id,)).fetchone()
         if not row:
             err(f"Menu {menu_id} not found")
 
@@ -219,7 +220,7 @@ def update_menu_item(conn, args):
     item_id = getattr(args, "menu_item_id", None)
     if not item_id:
         err("--menu-item-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_menu_item WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_menu_item")).select(Field("id")).where(Field("id") == P()).get_sql(), (item_id,)).fetchone()
     if not row:
         err(f"Menu item {item_id} not found")
     _validate_enum(getattr(args, "category", None), VALID_ITEM_CATEGORIES, "category")
@@ -268,7 +269,7 @@ def get_menu_item(conn, args):
     item_id = getattr(args, "menu_item_id", None)
     if not item_id:
         err("--menu-item-id is required")
-    row = conn.execute("SELECT * FROM foodclaw_menu_item WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_menu_item")).select(Table("foodclaw_menu_item").star).where(Field("id") == P()).get_sql(), (item_id,)).fetchone()
     if not row:
         err(f"Menu item {item_id} not found")
     data = row_to_dict(row)
@@ -368,7 +369,7 @@ def add_modifier(conn, args):
     mg_id = getattr(args, "modifier_group_id", None)
     if not mg_id:
         err("--modifier-group-id is required")
-    row = conn.execute("SELECT id FROM foodclaw_modifier_group WHERE id = ?", (mg_id,)).fetchone()
+    row = conn.execute(Q.from_(Table("foodclaw_modifier_group")).select(Field("id")).where(Field("id") == P()).get_sql(), (mg_id,)).fetchone()
     if not row:
         err(f"Modifier group {mg_id} not found")
     if not getattr(args, "name", None):
