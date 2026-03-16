@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_inspection", "INSP-")
 except ImportError:
@@ -62,12 +62,8 @@ def add_haccp_log(conn, args):
     if getattr(args, "is_within_range", None) is not None:
         is_within = int(args.is_within_range)
 
-    conn.execute("""
-        INSERT INTO foodclaw_haccp_log (id, company_id, ccp_name, log_date, log_time,
-            monitored_by, parameter, measured_value, acceptable_range, is_within_range,
-            corrective_action, notes, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_haccp_log", {"id": P(), "company_id": P(), "ccp_name": P(), "log_date": P(), "log_time": P(), "monitored_by": P(), "parameter": P(), "measured_value": P(), "acceptable_range": P(), "is_within_range": P(), "corrective_action": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         hl_id, args.company_id, ccp_name, log_date,
         getattr(args, "log_time", None),
         getattr(args, "monitored_by", None),
@@ -145,12 +141,8 @@ def add_temp_reading(conn, args):
 
     tr_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_temp_reading (id, company_id, equipment_name, location,
-            reading_date, reading_time, temperature, temp_unit, safe_min, safe_max,
-            is_safe, recorded_by, corrective_action, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_temp_reading", {"id": P(), "company_id": P(), "equipment_name": P(), "location": P(), "reading_date": P(), "reading_time": P(), "temperature": P(), "temp_unit": P(), "safe_min": P(), "safe_max": P(), "is_safe": P(), "recorded_by": P(), "corrective_action": P(), "created_at": P()})
+    conn.execute(sql, (
         tr_id, args.company_id, equipment_name,
         getattr(args, "location", None),
         reading_date,
@@ -210,13 +202,8 @@ def add_inspection(conn, args):
     ns = get_next_name(conn, "foodclaw_inspection", company_id=args.company_id)
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_inspection (id, naming_series, company_id, inspection_type,
-            inspector_name, inspection_date, score, max_score, grade, findings,
-            corrective_actions, follow_up_date, inspection_status, notes,
-            created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_inspection", {"id": P(), "naming_series": P(), "company_id": P(), "inspection_type": P(), "inspector_name": P(), "inspection_date": P(), "score": P(), "max_score": P(), "grade": P(), "findings": P(), "corrective_actions": P(), "follow_up_date": P(), "inspection_status": P(), "notes": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         insp_id, ns, args.company_id,
         getattr(args, "inspection_type", None) or "routine",
         getattr(args, "inspector_name", None),

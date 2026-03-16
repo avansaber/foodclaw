@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_recipe", "RCP-")
 except ImportError:
@@ -58,14 +58,8 @@ def add_recipe(conn, args):
     to_decimal(batch_size)
     to_decimal(yield_pct)
 
-    conn.execute("""
-        INSERT INTO foodclaw_recipe (id, naming_series, company_id, name, product_name,
-            description, category, batch_size, batch_unit, expected_yield_pct,
-            total_cost, cost_per_portion, portions_per_batch,
-            prep_time_min, cook_time_min, instructions, menu_item_id, status,
-            created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_recipe", {"id": P(), "naming_series": P(), "company_id": P(), "name": P(), "product_name": P(), "description": P(), "category": P(), "batch_size": P(), "batch_unit": P(), "expected_yield_pct": P(), "total_cost": P(), "cost_per_portion": P(), "portions_per_batch": P(), "prep_time_min": P(), "cook_time_min": P(), "instructions": P(), "menu_item_id": P(), "status": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         recipe_id, ns, args.company_id, args.name,
         getattr(args, "product_name", None),
         getattr(args, "description", None),
@@ -228,11 +222,8 @@ def add_recipe_ingredient(conn, args):
     ri_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_recipe_ingredient (id, recipe_id, ingredient_id, ingredient_name,
-            quantity, unit, unit_cost, line_cost, notes, sort_order, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_recipe_ingredient", {"id": P(), "recipe_id": P(), "ingredient_id": P(), "ingredient_name": P(), "quantity": P(), "unit": P(), "unit_cost": P(), "line_cost": P(), "notes": P(), "sort_order": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         ri_id, recipe_id, ing_id, ingredient_name,
         qty,
         getattr(args, "unit", None) or "unit",
@@ -338,7 +329,8 @@ def calculate_recipe_cost(conn, args):
         uc = to_decimal(d.get("unit_cost", "0.00"))
         lc = qty * uc
         # Update line_cost in DB
-        conn.execute("UPDATE foodclaw_recipe_ingredient SET line_cost = ? WHERE id = ?", (str(lc), d["id"]))
+        sql_lc, lc_params = dynamic_update("foodclaw_recipe_ingredient", {"line_cost": str(lc)}, where={"id": d["id"]})
+        conn.execute(sql_lc, lc_params)
         total += lc
         ingredients.append({"ingredient_name": d["ingredient_name"], "quantity": str(qty), "unit_cost": str(uc), "line_cost": str(lc)})
 
@@ -346,10 +338,12 @@ def calculate_recipe_cost(conn, args):
     cost_per_portion = str((total / Decimal(str(ppb))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) if ppb > 0 else "0.00"
 
     # Update recipe totals
-    conn.execute(
-        "UPDATE foodclaw_recipe SET total_cost = ?, cost_per_portion = ?, updated_at = ? WHERE id = ?",
-        (str(total), cost_per_portion, _now_iso(), recipe_id)
-    )
+    sql_rt, rt_params = dynamic_update("foodclaw_recipe", {
+        "total_cost": str(total),
+        "cost_per_portion": cost_per_portion,
+        "updated_at": _now_iso(),
+    }, where={"id": recipe_id})
+    conn.execute(sql_rt, rt_params)
     conn.commit()
 
     ok({

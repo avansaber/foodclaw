@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_employee", "FEMP-")
 except ImportError:
@@ -69,11 +69,8 @@ def add_employee(conn, args):
     hourly_rate = getattr(args, "hourly_rate", None) or "0.00"
     to_decimal(hourly_rate)
 
-    conn.execute("""
-        INSERT INTO foodclaw_employee (id, naming_series, company_id, employee_id,
-            role, hourly_rate, status, certifications, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_employee", {"id": P(), "naming_series": P(), "company_id": P(), "employee_id": P(), "role": P(), "hourly_rate": P(), "status": P(), "certifications": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         emp_id, ns, args.company_id,
         core_emp_id,
         getattr(args, "role", None) or "staff",
@@ -199,11 +196,8 @@ def add_shift(conn, args):
     shift_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_shift (id, company_id, employee_id, shift_date,
-            start_time, end_time, role_assigned, shift_status, notes, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_shift", {"id": P(), "company_id": P(), "employee_id": P(), "shift_date": P(), "start_time": P(), "end_time": P(), "role_assigned": P(), "shift_status": P(), "notes": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         shift_id, args.company_id, emp_id, shift_date,
         start_time,
         getattr(args, "end_time", None),
@@ -300,10 +294,12 @@ def clock_in(conn, args):
         err(f"Cannot clock in: shift status is '{row[1]}', expected 'scheduled'")
 
     now = _now_iso()
-    conn.execute(
-        "UPDATE foodclaw_shift SET shift_status = 'clocked_in', clock_in_time = ?, updated_at = ? WHERE id = ?",
-        (now, now, shift_id)
-    )
+    sql, upd_params = dynamic_update("foodclaw_shift", {
+        "shift_status": "clocked_in",
+        "clock_in_time": now,
+        "updated_at": now,
+    }, where={"id": shift_id})
+    conn.execute(sql, upd_params)
     audit(conn, "foodclaw_shift", shift_id, "food-clock-in", None)
     conn.commit()
     ok({"id": shift_id, "shift_status": "clocked_in", "clock_in_time": now})
@@ -336,10 +332,13 @@ def clock_out(conn, args):
     except (ValueError, TypeError):
         pass
 
-    conn.execute(
-        "UPDATE foodclaw_shift SET shift_status = 'clocked_out', clock_out_time = ?, hours_worked = ?, updated_at = ? WHERE id = ?",
-        (now, hours_worked, now, shift_id)
-    )
+    sql, upd_params = dynamic_update("foodclaw_shift", {
+        "shift_status": "clocked_out",
+        "clock_out_time": now,
+        "hours_worked": hours_worked,
+        "updated_at": now,
+    }, where={"id": shift_id})
+    conn.execute(sql, upd_params)
     audit(conn, "foodclaw_shift", shift_id, "food-clock-out", None)
     conn.commit()
     ok({"id": shift_id, "shift_status": "clocked_out", "clock_out_time": now, "hours_worked": hours_worked})
@@ -371,11 +370,8 @@ def add_tip_distribution(conn, args):
 
     tip_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_tip_distribution (id, company_id, employee_id, shift_id,
-            tip_date, cash_tips, credit_tips, tip_pool_share, total_tips, notes, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_tip_distribution", {"id": P(), "company_id": P(), "employee_id": P(), "shift_id": P(), "tip_date": P(), "cash_tips": P(), "credit_tips": P(), "tip_pool_share": P(), "total_tips": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         tip_id, args.company_id, emp_id,
         getattr(args, "shift_id", None),
         tip_date, cash_tips, credit_tips, tip_pool_share, total_tips,

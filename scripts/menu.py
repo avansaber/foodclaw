@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_menu", "MENU-")
     ENTITY_PREFIXES.setdefault("foodclaw_menu_item", "MI-")
@@ -59,11 +59,8 @@ def add_menu(conn, args):
     ns = get_next_name(conn, "foodclaw_menu", company_id=args.company_id)
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_menu (id, naming_series, company_id, name, description,
-            menu_type, is_active, effective_date, end_date, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_menu", {"id": P(), "naming_series": P(), "company_id": P(), "name": P(), "description": P(), "menu_type": P(), "is_active": P(), "effective_date": P(), "end_date": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         menu_id, ns, args.company_id, args.name,
         getattr(args, "description", None),
         getattr(args, "menu_type", None) or "regular",
@@ -90,32 +87,30 @@ def update_menu(conn, args):
 
     _validate_enum(getattr(args, "menu_type", None), VALID_MENU_TYPES, "menu-type")
 
-    updates, params = [], []
+    data, changed = {}, []
     for field, col in [
         ("name", "name"), ("description", "description"), ("menu_type", "menu_type"),
         ("effective_date", "effective_date"), ("end_date", "end_date"),
     ]:
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{col} = ?")
-            params.append(val)
+            data[col] = val
+            changed.append(col)
 
     is_active = getattr(args, "is_active", None)
     if is_active is not None:
-        updates.append("is_active = ?")
-        params.append(int(is_active))
+        data["is_active"] = int(is_active)
+        changed.append("is_active")
 
-    if not updates:
+    if not data:
         err("No fields to update")
 
-    updates.append("updated_at = ?")
-    params.append(_now_iso())
-    params.append(menu_id)
-
-    conn.execute(f"UPDATE foodclaw_menu SET {', '.join(updates)} WHERE id = ?", params)
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("foodclaw_menu", data, where={"id": menu_id})
+    conn.execute(sql, params)
     audit(conn, "foodclaw_menu", menu_id, "food-update-menu", None)
     conn.commit()
-    ok({"id": menu_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
+    ok({"id": menu_id, "updated_fields": changed})
 
 
 # ---------------------------------------------------------------------------
@@ -186,13 +181,8 @@ def add_menu_item(conn, args):
     to_decimal(price)
     to_decimal(cost)
 
-    conn.execute("""
-        INSERT INTO foodclaw_menu_item (id, naming_series, company_id, menu_id, name,
-            description, category, price, cost, allergens, nutrition_info,
-            is_available, is_vegetarian, is_vegan, is_gluten_free,
-            prep_time_min, calories, sort_order, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_menu_item", {"id": P(), "naming_series": P(), "company_id": P(), "menu_id": P(), "name": P(), "description": P(), "category": P(), "price": P(), "cost": P(), "allergens": P(), "nutrition_info": P(), "is_available": P(), "is_vegetarian": P(), "is_vegan": P(), "is_gluten_free": P(), "prep_time_min": P(), "calories": P(), "sort_order": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         item_id, ns, args.company_id, menu_id, args.name,
         getattr(args, "description", None),
         getattr(args, "category", None) or "other",
@@ -225,41 +215,39 @@ def update_menu_item(conn, args):
         err(f"Menu item {item_id} not found")
     _validate_enum(getattr(args, "category", None), VALID_ITEM_CATEGORIES, "category")
 
-    updates, params = [], []
+    data, changed = {}, []
     for field, col in [
         ("name", "name"), ("description", "description"), ("category", "category"),
         ("allergens", "allergens"), ("nutrition_info", "nutrition_info"),
     ]:
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{col} = ?")
-            params.append(val)
+            data[col] = val
+            changed.append(col)
 
     for field, col in [("price", "price"), ("cost", "cost")]:
         val = getattr(args, field, None)
         if val is not None:
             to_decimal(val)
-            updates.append(f"{col} = ?")
-            params.append(val)
+            data[col] = val
+            changed.append(col)
 
     for field, col in [("is_available", "is_available"), ("is_vegetarian", "is_vegetarian"),
                        ("is_vegan", "is_vegan"), ("is_gluten_free", "is_gluten_free")]:
         val = getattr(args, field, None)
         if val is not None:
-            updates.append(f"{col} = ?")
-            params.append(int(val))
+            data[col] = int(val)
+            changed.append(col)
 
-    if not updates:
+    if not data:
         err("No fields to update")
 
-    updates.append("updated_at = ?")
-    params.append(_now_iso())
-    params.append(item_id)
-
-    conn.execute(f"UPDATE foodclaw_menu_item SET {', '.join(updates)} WHERE id = ?", params)
+    data["updated_at"] = _now_iso()
+    sql, params = dynamic_update("foodclaw_menu_item", data, where={"id": item_id})
+    conn.execute(sql, params)
     audit(conn, "foodclaw_menu_item", item_id, "food-update-menu-item", None)
     conn.commit()
-    ok({"id": item_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
+    ok({"id": item_id, "updated_fields": changed})
 
 
 # ---------------------------------------------------------------------------
@@ -321,11 +309,8 @@ def add_modifier_group(conn, args):
     group_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_modifier_group (id, company_id, name, description,
-            min_selections, max_selections, is_required, menu_item_id, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_modifier_group", {"id": P(), "company_id": P(), "name": P(), "description": P(), "min_selections": P(), "max_selections": P(), "is_required": P(), "menu_item_id": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         group_id, args.company_id, args.name,
         getattr(args, "description", None),
         getattr(args, "min_selections", None) or 0,
@@ -381,11 +366,8 @@ def add_modifier(conn, args):
     mod_id = str(uuid.uuid4())
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_modifier (id, company_id, modifier_group_id, name,
-            price_adjustment, is_default, is_available, sort_order, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_modifier", {"id": P(), "company_id": P(), "modifier_group_id": P(), "name": P(), "price_adjustment": P(), "is_default": P(), "is_available": P(), "sort_order": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         mod_id, args.company_id, mg_id, args.name,
         price_adj,
         int(getattr(args, "is_default", None) or 0),

@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_ingredient", "ING-")
     ENTITY_PREFIXES.setdefault("foodclaw_purchase_order", "FPO-")
@@ -65,12 +65,8 @@ def add_ingredient(conn, args):
     to_decimal(par_level)
     to_decimal(current_stock)
 
-    conn.execute("""
-        INSERT INTO foodclaw_ingredient (id, naming_series, company_id, name, category,
-            unit, par_level, current_stock, unit_cost, supplier, is_perishable,
-            expiry_date, reorder_point, storage_location, status, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_ingredient", {"id": P(), "naming_series": P(), "company_id": P(), "name": P(), "category": P(), "unit": P(), "par_level": P(), "current_stock": P(), "unit_cost": P(), "supplier": P(), "is_perishable": P(), "expiry_date": P(), "reorder_point": P(), "storage_location": P(), "status": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         ing_id, ns, args.company_id, args.name,
         getattr(args, "ingredient_category", None) or "other",
         getattr(args, "unit", None) or "unit",
@@ -209,11 +205,8 @@ def add_stock_count(conn, args):
 
     sc_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_stock_count (id, company_id, ingredient_id, count_date,
-            counted_qty, system_qty, variance, counted_by, notes, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_stock_count", {"id": P(), "company_id": P(), "ingredient_id": P(), "count_date": P(), "counted_qty": P(), "system_qty": P(), "variance": P(), "counted_by": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         sc_id, args.company_id, ing_id, count_date,
         counted_qty, system_qty, variance,
         getattr(args, "counted_by", None),
@@ -222,8 +215,8 @@ def add_stock_count(conn, args):
     ))
 
     # Update current stock to match count
-    conn.execute("UPDATE foodclaw_ingredient SET current_stock = ?, updated_at = ? WHERE id = ?",
-                 (counted_qty, _now_iso(), ing_id))
+    sql_upd, upd_params = dynamic_update("foodclaw_ingredient", {"current_stock": counted_qty, "updated_at": _now_iso()}, where={"id": ing_id})
+    conn.execute(sql_upd, upd_params)
     audit(conn, "foodclaw_stock_count", sc_id, "food-add-stock-count", args.company_id)
     conn.commit()
     ok({"id": sc_id, "ingredient_id": ing_id, "counted_qty": counted_qty, "system_qty": system_qty, "variance": variance})
@@ -278,11 +271,8 @@ def add_waste_log(conn, args):
 
     wl_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_waste_log (id, company_id, ingredient_id, item_name,
-            waste_date, quantity, unit, reason, cost, logged_by, notes, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_waste_log", {"id": P(), "company_id": P(), "ingredient_id": P(), "item_name": P(), "waste_date": P(), "quantity": P(), "unit": P(), "reason": P(), "cost": P(), "logged_by": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         wl_id, args.company_id, ing_id, item_name,
         waste_date, quantity,
         getattr(args, "unit", None) or "unit",
@@ -345,12 +335,8 @@ def add_purchase_order(conn, args):
     ns = get_next_name(conn, "foodclaw_purchase_order", company_id=args.company_id)
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_purchase_order (id, naming_series, company_id, supplier_id,
-            order_date, expected_date, total_amount, order_status, notes, items_json,
-            created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_purchase_order", {"id": P(), "naming_series": P(), "company_id": P(), "supplier_id": P(), "order_date": P(), "expected_date": P(), "total_amount": P(), "order_status": P(), "notes": P(), "items_json": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         po_id, ns, args.company_id, supplier_id,
         order_date,
         getattr(args, "expected_date", None),

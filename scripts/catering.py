@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_catering_event", "CATER-")
 except ImportError:
@@ -80,13 +80,8 @@ def add_catering_event(conn, args):
     ns = get_next_name(conn, "foodclaw_catering_event", company_id=args.company_id)
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_catering_event (id, naming_series, company_id, event_name,
-            client_name, client_phone, client_email, event_date, event_time, venue,
-            guest_count, event_status, estimated_cost, quoted_price, deposit_amount,
-            notes, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_catering_event", {"id": P(), "naming_series": P(), "company_id": P(), "event_name": P(), "client_name": P(), "client_phone": P(), "client_email": P(), "event_date": P(), "event_time": P(), "venue": P(), "guest_count": P(), "event_status": P(), "estimated_cost": P(), "quoted_price": P(), "deposit_amount": P(), "notes": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         event_id, ns, args.company_id, event_name,
         client_name,
         getattr(args, "client_phone", None),
@@ -223,11 +218,8 @@ def add_catering_item(conn, args):
 
     ci_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_catering_item (id, event_id, menu_item_id, item_name,
-            quantity, unit_price, line_total, notes, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_catering_item", {"id": P(), "event_id": P(), "menu_item_id": P(), "item_name": P(), "quantity": P(), "unit_price": P(), "line_total": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         ci_id, event_id,
         getattr(args, "menu_item_id", None),
         item_name, int(quantity), unit_price, line_total,
@@ -246,8 +238,9 @@ def list_catering_items(conn, args):
     event_id = getattr(args, "event_id", None)
     _validate_event(conn, event_id)
 
+    ci = Table("foodclaw_catering_item")
     rows = conn.execute(
-        "SELECT * FROM foodclaw_catering_item WHERE event_id = ? ORDER BY created_at", (event_id,)
+        Q.from_(ci).select(ci.star).where(ci.event_id == P()).orderby(ci.created_at).get_sql(), (event_id,)
     ).fetchall()
     ok({"items": [row_to_dict(r) for r in rows], "total_count": len(rows)})
 
@@ -264,11 +257,8 @@ def add_dietary_requirement(conn, args):
 
     dr_id = str(uuid.uuid4())
 
-    conn.execute("""
-        INSERT INTO foodclaw_dietary_requirement (id, event_id, requirement,
-            guest_count, notes, created_at)
-        VALUES (?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_dietary_requirement", {"id": P(), "event_id": P(), "requirement": P(), "guest_count": P(), "notes": P(), "created_at": P()})
+    conn.execute(sql, (
         dr_id, event_id, requirement,
         getattr(args, "guest_count", None) or 1,
         getattr(args, "notes", None),
@@ -302,10 +292,11 @@ def confirm_event(conn, args):
         err(f"Cannot confirm: event status is '{row[0]}', expected 'inquiry' or 'quoted'")
 
     now = _now_iso()
-    conn.execute(
-        "UPDATE foodclaw_catering_event SET event_status = 'confirmed', updated_at = ? WHERE id = ?",
-        (now, event_id)
-    )
+    sql, upd_params = dynamic_update("foodclaw_catering_event", {
+        "event_status": "confirmed",
+        "updated_at": now,
+    }, where={"id": event_id})
+    conn.execute(sql, upd_params)
     audit(conn, "foodclaw_catering_event", event_id, "food-confirm-event", None)
     conn.commit()
     ok({"id": event_id, "event_status": "confirmed"})

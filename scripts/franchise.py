@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_franchise_unit", "FUNIT-")
     ENTITY_PREFIXES.setdefault("foodclaw_royalty_entry", "ROYAL-")
@@ -72,12 +72,8 @@ def add_franchise_unit(conn, args):
     ns = get_next_name(conn, "foodclaw_franchise_unit", company_id=args.company_id)
     now = _now_iso()
 
-    conn.execute("""
-        INSERT INTO foodclaw_franchise_unit (id, naming_series, company_id, unit_name,
-            unit_code, address, city, state, zip_code, manager_name, phone,
-            open_date, status, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
+    sql, _ = insert_row("foodclaw_franchise_unit", {"id": P(), "naming_series": P(), "company_id": P(), "unit_name": P(), "unit_code": P(), "address": P(), "city": P(), "state": P(), "zip_code": P(), "manager_name": P(), "phone": P(), "open_date": P(), "status": P(), "created_at": P(), "updated_at": P()})
+    conn.execute(sql, (
         unit_id, ns, args.company_id, unit_name,
         getattr(args, "unit_code", None),
         getattr(args, "address", None),
@@ -413,10 +409,8 @@ def update_royalty_payment_status(conn, args):
         err("--payment-status is required")
     _validate_enum(payment_status, VALID_PAYMENT_STATUSES, "payment-status")
 
-    conn.execute(
-        "UPDATE foodclaw_royalty_entry SET payment_status = ? WHERE id = ?",
-        (payment_status, royalty_id)
-    )
+    sql, upd_params = dynamic_update("foodclaw_royalty_entry", {"payment_status": payment_status}, where={"id": royalty_id})
+    conn.execute(sql, upd_params)
     audit(conn, "foodclaw_royalty_entry", royalty_id, "food-update-royalty-status", None)
     conn.commit()
     ok({"id": royalty_id, "payment_status": payment_status})
