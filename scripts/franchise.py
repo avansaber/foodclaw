@@ -18,7 +18,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_franchise_unit", "FUNIT-")
     ENTITY_PREFIXES.setdefault("foodclaw_royalty_entry", "ROYAL-")
@@ -138,8 +138,8 @@ def get_franchise_unit(conn, args):
     # Include royalty summary
     royalties = conn.execute("""
         SELECT COUNT(*) as entry_count,
-               COALESCE(SUM(CAST(total_due AS REAL)), 0) as total_due,
-               COALESCE(SUM(CAST(royalty_amount AS REAL)), 0) as total_royalties
+               COALESCE(SUM(CAST(total_due AS NUMERIC)), 0) as total_due,
+               COALESCE(SUM(CAST(royalty_amount AS NUMERIC)), 0) as total_royalties
         FROM foodclaw_royalty_entry
         WHERE franchise_unit_id = ?
     """, (unit_id,)).fetchone()
@@ -163,7 +163,7 @@ def list_franchise_units(conn, args):
         where.append("status = ?")
         params.append(args.status)
     if getattr(args, "search", None):
-        where.append("(unit_name LIKE ? OR unit_code LIKE ?)")
+        where.append("(LOWER(unit_name) LIKE LOWER(?) OR LOWER(unit_code) LIKE LOWER(?))")
         params.extend([f"%{args.search}%", f"%{args.search}%"])
 
     total = conn.execute(

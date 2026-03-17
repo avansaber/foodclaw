@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_menu", "MENU-")
     ENTITY_PREFIXES.setdefault("foodclaw_menu_item", "MI-")
@@ -142,7 +142,7 @@ def list_menus(conn, args):
         where.append("menu_type = ?")
         params.append(args.menu_type)
     if getattr(args, "search", None):
-        where.append("(name LIKE ? OR description LIKE ?)")
+        where.append("(LOWER(name) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))")
         params.extend([f"%{args.search}%", f"%{args.search}%"])
 
     total = conn.execute(
@@ -285,7 +285,7 @@ def list_menu_items(conn, args):
         where.append("category = ?")
         params.append(args.category)
     if getattr(args, "search", None):
-        where.append("(name LIKE ? OR description LIKE ?)")
+        where.append("(LOWER(name) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?))")
         params.extend([f"%{args.search}%", f"%{args.search}%"])
 
     total = conn.execute(

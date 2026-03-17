@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_catering_event", "CATER-")
 except ImportError:
@@ -188,7 +188,7 @@ def list_catering_events(conn, args):
         where.append("event_status = ?")
         params.append(args.event_status)
     if getattr(args, "search", None):
-        where.append("(event_name LIKE ? OR client_name LIKE ?)")
+        where.append("(LOWER(event_name) LIKE LOWER(?) OR LOWER(client_name) LIKE LOWER(?))")
         params.extend([f"%{args.search}%", f"%{args.search}%"])
 
     total = conn.execute(
@@ -337,7 +337,7 @@ def complete_catering_event(conn, args):
     else:
         # Sum catering items
         items_total = conn.execute(
-            "SELECT COALESCE(SUM(CAST(line_total AS REAL)), 0) FROM foodclaw_catering_item WHERE event_id = ?",
+            "SELECT COALESCE(SUM(CAST(line_total AS NUMERIC)), 0) FROM foodclaw_catering_item WHERE event_id = ?",
             (event_id,)
         ).fetchone()[0]
         final_amount = str(to_decimal(str(items_total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))

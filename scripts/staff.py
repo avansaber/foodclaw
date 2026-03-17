@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_employee", "FEMP-")
 except ImportError:
@@ -145,7 +145,7 @@ def list_employees(conn, args):
         where.append("fe.status = ?")
         params.append(args.emp_status)
     if getattr(args, "search", None):
-        where.append("(e.first_name LIKE ? OR e.last_name LIKE ? OR e.full_name LIKE ?)")
+        where.append("(LOWER(e.first_name) LIKE LOWER(?) OR LOWER(e.last_name) LIKE LOWER(?) OR LOWER(e.full_name) LIKE LOWER(?))")
         params.extend([f"%{args.search}%"] * 3)
 
     w = ' AND '.join(where)

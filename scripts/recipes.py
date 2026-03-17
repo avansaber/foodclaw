@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_recipe", "RCP-")
 except ImportError:
@@ -171,7 +171,7 @@ def list_recipes(conn, args):
         where.append("status = ?")
         params.append(args.status)
     if getattr(args, "search", None):
-        where.append("(name LIKE ? OR product_name LIKE ?)")
+        where.append("(LOWER(name) LIKE LOWER(?) OR LOWER(product_name) LIKE LOWER(?))")
         params.extend([f"%{args.search}%", f"%{args.search}%"])
 
     total = conn.execute(

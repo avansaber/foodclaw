@@ -26,7 +26,8 @@ REQUIRED_FOUNDATION = [
 def init_foodclaw_schema(db_path=None):
     db_path = db_path or DEFAULT_DB_PATH
     conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
+    from erpclaw_lib.db import setup_pragmas
+    setup_pragmas(conn)
 
     # ── Verify ERPClaw foundation ────────────────────────────────
     tables = [r[0] for r in conn.execute(
@@ -62,8 +63,8 @@ def init_foodclaw_schema(db_path=None):
             is_active       INTEGER DEFAULT 1,
             effective_date  TEXT,
             end_date        TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_menu_company ON foodclaw_menu(company_id);
 
@@ -88,8 +89,8 @@ def init_foodclaw_schema(db_path=None):
             calories        INTEGER,
             sort_order      INTEGER DEFAULT 0,
             image_url       TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_menu_item_menu ON foodclaw_menu_item(menu_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_menu_item_company ON foodclaw_menu_item(company_id);
@@ -104,8 +105,8 @@ def init_foodclaw_schema(db_path=None):
             max_selections  INTEGER DEFAULT 1,
             is_required     INTEGER DEFAULT 0,
             menu_item_id    TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_mod_group_item ON foodclaw_modifier_group(menu_item_id);
 
@@ -118,8 +119,8 @@ def init_foodclaw_schema(db_path=None):
             is_default      INTEGER DEFAULT 0,
             is_available    INTEGER DEFAULT 1,
             sort_order      INTEGER DEFAULT 0,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_modifier_group ON foodclaw_modifier(modifier_group_id);
 
@@ -146,8 +147,8 @@ def init_foodclaw_schema(db_path=None):
             menu_item_id        TEXT,
             status              TEXT DEFAULT 'active'
                                 CHECK (status IN ('active','inactive','archived')),
-            created_at          TEXT DEFAULT (datetime('now')),
-            updated_at          TEXT DEFAULT (datetime('now'))
+            created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_recipe_company ON foodclaw_recipe(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_recipe_menu_item ON foodclaw_recipe(menu_item_id);
@@ -163,8 +164,8 @@ def init_foodclaw_schema(db_path=None):
             line_cost       TEXT DEFAULT '0.00',
             notes           TEXT,
             sort_order      INTEGER DEFAULT 0,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_recipe_ing_recipe ON foodclaw_recipe_ingredient(recipe_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_recipe_ing_ingredient ON foodclaw_recipe_ingredient(ingredient_id);
@@ -190,8 +191,8 @@ def init_foodclaw_schema(db_path=None):
             storage_location TEXT,
             status          TEXT DEFAULT 'active'
                             CHECK (status IN ('active','inactive','discontinued')),
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_ingredient_company ON foodclaw_ingredient(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_ingredient_category ON foodclaw_ingredient(category);
@@ -206,7 +207,7 @@ def init_foodclaw_schema(db_path=None):
             variance        TEXT DEFAULT '0',
             counted_by      TEXT,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_stock_count_ingredient ON foodclaw_stock_count(ingredient_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_stock_count_date ON foodclaw_stock_count(count_date);
@@ -224,7 +225,7 @@ def init_foodclaw_schema(db_path=None):
             cost            TEXT DEFAULT '0.00',
             logged_by       TEXT,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_waste_log_company ON foodclaw_waste_log(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_waste_log_date ON foodclaw_waste_log(waste_date);
@@ -241,8 +242,8 @@ def init_foodclaw_schema(db_path=None):
                             CHECK (order_status IN ('draft','sent','received','partial','cancelled')),
             notes           TEXT,
             items_json      TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_po_company ON foodclaw_purchase_order(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_po_status ON foodclaw_purchase_order(order_status);
@@ -261,8 +262,8 @@ def init_foodclaw_schema(db_path=None):
             status          TEXT DEFAULT 'active'
                             CHECK (status IN ('active','inactive','terminated')),
             certifications  TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_employee_company ON foodclaw_employee(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_employee_role ON foodclaw_employee(role);
@@ -283,8 +284,8 @@ def init_foodclaw_schema(db_path=None):
             shift_status    TEXT DEFAULT 'scheduled'
                             CHECK (shift_status IN ('scheduled','clocked_in','clocked_out','no_show','cancelled')),
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_shift_employee ON foodclaw_shift(employee_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_shift_date ON foodclaw_shift(shift_date);
@@ -300,7 +301,7 @@ def init_foodclaw_schema(db_path=None):
             tip_pool_share  TEXT DEFAULT '0.00',
             total_tips      TEXT DEFAULT '0.00',
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_tips_employee ON foodclaw_tip_distribution(employee_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_tips_date ON foodclaw_tip_distribution(tip_date);
@@ -331,8 +332,8 @@ def init_foodclaw_schema(db_path=None):
             cost_center_id          TEXT,
             gl_entry_ids    TEXT,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_catering_company ON foodclaw_catering_event(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_catering_date ON foodclaw_catering_event(event_date);
@@ -347,7 +348,7 @@ def init_foodclaw_schema(db_path=None):
             unit_price      TEXT DEFAULT '0.00',
             line_total      TEXT DEFAULT '0.00',
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_catering_item_event ON foodclaw_catering_item(event_id);
 
@@ -357,7 +358,7 @@ def init_foodclaw_schema(db_path=None):
             requirement     TEXT NOT NULL,
             guest_count     INTEGER DEFAULT 1,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_dietary_event ON foodclaw_dietary_requirement(event_id);
 
@@ -377,7 +378,7 @@ def init_foodclaw_schema(db_path=None):
             is_within_range INTEGER DEFAULT 1,
             corrective_action TEXT,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_haccp_company ON foodclaw_haccp_log(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_haccp_date ON foodclaw_haccp_log(log_date);
@@ -396,7 +397,7 @@ def init_foodclaw_schema(db_path=None):
             is_safe         INTEGER DEFAULT 1,
             recorded_by     TEXT,
             corrective_action TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_temp_company ON foodclaw_temp_reading(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_temp_date ON foodclaw_temp_reading(reading_date);
@@ -418,8 +419,8 @@ def init_foodclaw_schema(db_path=None):
             inspection_status   TEXT DEFAULT 'scheduled'
                                 CHECK (inspection_status IN ('scheduled','in_progress','completed','failed','follow_up')),
             notes               TEXT,
-            created_at          TEXT DEFAULT (datetime('now')),
-            updated_at          TEXT DEFAULT (datetime('now'))
+            created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_inspection_company ON foodclaw_inspection(company_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_inspection_date ON foodclaw_inspection(inspection_date);
@@ -442,8 +443,8 @@ def init_foodclaw_schema(db_path=None):
             open_date       TEXT,
             status          TEXT DEFAULT 'active'
                             CHECK (status IN ('active','inactive','closed','under_construction')),
-            created_at      TEXT DEFAULT (datetime('now')),
-            updated_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_franchise_company ON foodclaw_franchise_unit(company_id);
 
@@ -467,7 +468,7 @@ def init_foodclaw_schema(db_path=None):
             cost_center_id              TEXT,
             gl_entry_ids    TEXT,
             notes           TEXT,
-            created_at      TEXT DEFAULT (datetime('now'))
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_foodclaw_royalty_unit ON foodclaw_royalty_entry(franchise_unit_id);
         CREATE INDEX IF NOT EXISTS idx_foodclaw_royalty_period ON foodclaw_royalty_entry(period_start, period_end);

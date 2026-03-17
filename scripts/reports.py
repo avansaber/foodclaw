@@ -37,8 +37,8 @@ def food_cost_report(conn, args):
     rows = conn.execute(f"""
         SELECT mi.category,
                COUNT(*) as item_count,
-               SUM(CAST(r.cost_per_portion AS REAL)) as total_cost,
-               SUM(CAST(mi.price AS REAL)) as total_revenue
+               SUM(CAST(r.cost_per_portion AS NUMERIC)) as total_cost,
+               SUM(CAST(mi.price AS NUMERIC)) as total_revenue
         FROM foodclaw_recipe r
         JOIN foodclaw_menu_item mi ON r.menu_item_id = mi.id
         WHERE {' AND '.join(where)}
@@ -96,8 +96,8 @@ def labor_report(conn, args):
     rows = conn.execute(f"""
         SELECT fe.role,
                COUNT(DISTINCT fe.id) as employee_count,
-               SUM(CAST(s.hours_worked AS REAL)) as total_hours,
-               SUM(CAST(s.hours_worked AS REAL) * CAST(fe.hourly_rate AS REAL)) as total_cost
+               SUM(CAST(s.hours_worked AS NUMERIC)) as total_hours,
+               SUM(CAST(s.hours_worked AS NUMERIC) * CAST(fe.hourly_rate AS NUMERIC)) as total_cost
         FROM foodclaw_shift s
         JOIN foodclaw_employee fe ON s.employee_id = fe.id
         WHERE {' AND '.join(where_s)}
@@ -146,8 +146,8 @@ def waste_report(conn, args):
     rows = conn.execute(f"""
         SELECT reason,
                COUNT(*) as log_count,
-               SUM(CAST(quantity AS REAL)) as total_qty,
-               SUM(CAST(cost AS REAL)) as total_cost
+               SUM(CAST(quantity AS NUMERIC)) as total_qty,
+               SUM(CAST(cost AS NUMERIC)) as total_cost
         FROM foodclaw_waste_log
         WHERE {' AND '.join(where)}
         GROUP BY reason
@@ -229,9 +229,9 @@ def franchise_comparison(conn, args):
     rows = conn.execute(f"""
         SELECT fu.id, fu.unit_name, fu.unit_code, fu.status,
                COUNT(re.id) as entry_count,
-               SUM(CAST(re.gross_revenue AS REAL)) as total_revenue,
-               SUM(CAST(re.royalty_amount AS REAL)) as total_royalties,
-               SUM(CAST(re.total_due AS REAL)) as total_due
+               SUM(CAST(re.gross_revenue AS NUMERIC)) as total_revenue,
+               SUM(CAST(re.royalty_amount AS NUMERIC)) as total_royalties,
+               SUM(CAST(re.total_due AS NUMERIC)) as total_due
         FROM foodclaw_franchise_unit fu
         LEFT JOIN foodclaw_royalty_entry re ON re.franchise_unit_id = fu.id
         WHERE {' AND '.join(where)}
@@ -290,7 +290,7 @@ def daily_sales_summary(conn, args):
 
     # Waste on this date
     waste_total = conn.execute(
-        f"SELECT COALESCE(SUM(CAST(cost AS REAL)), 0) FROM foodclaw_waste_log WHERE waste_date = ?{co_clause}",
+        f"SELECT COALESCE(SUM(CAST(cost AS NUMERIC)), 0) FROM foodclaw_waste_log WHERE waste_date = ?{co_clause}",
         [summary_date] + params_co
     ).fetchone()[0]
 

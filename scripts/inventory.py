@@ -17,7 +17,7 @@ try:
     from erpclaw_lib.naming import get_next_name, ENTITY_PREFIXES
     from erpclaw_lib.response import ok, err, row_to_dict
     from erpclaw_lib.audit import audit
-    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, LiteralValue, insert_row, update_row, dynamic_update
+    from erpclaw_lib.query import Q, P, Table, Field, fn, Order, insert_row, update_row, dynamic_update
 
     ENTITY_PREFIXES.setdefault("foodclaw_ingredient", "ING-")
     ENTITY_PREFIXES.setdefault("foodclaw_purchase_order", "FPO-")
@@ -169,7 +169,7 @@ def list_ingredients(conn, args):
         where.append("status = ?")
         params.append(args.ingredient_status)
     if getattr(args, "search", None):
-        where.append("name LIKE ?")
+        where.append("LOWER(name) LIKE LOWER(?)")
         params.append(f"%{args.search}%")
 
     total = conn.execute(
@@ -364,7 +364,7 @@ def list_purchase_orders(conn, args):
         where.append("po.order_status = ?")
         params.append(args.order_status)
     if getattr(args, "search", None):
-        where.append("s.name LIKE ?")
+        where.append("LOWER(s.name) LIKE LOWER(?)")
         params.append(f"%{args.search}%")
 
     where_sql = " AND ".join(where)
