@@ -167,6 +167,23 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `food-temp-violation-alert` | | `--company-id --reading-date` |
 | `food-haccp-compliance-report` | | `--company-id --start-date --end-date` |
 
+### Catering (continued)
+| Action | Required Flags | Optional Flags |
+|--------|---------------|----------------|
+| `food-complete-catering-event` | `--event-id` | |
+
+### Franchise (9 actions)
+| Action | Required Flags | Optional Flags |
+|--------|---------------|----------------|
+| `food-add-franchise-unit` | `--company-id --unit-name` | `--location --manager-name` |
+| `food-update-franchise-unit` | `--franchise-unit-id` | `--unit-name --location --manager-name --unit-status` |
+| `food-get-franchise-unit` | `--franchise-unit-id` | |
+| `food-list-franchise-units` | | `--company-id --unit-status --search --limit --offset` |
+| `food-add-royalty-entry` | `--franchise-unit-id --period-start --period-end` | `--gross-sales --royalty-rate --royalty-amount` |
+| `food-update-royalty-status` | `--royalty-entry-id` | `--royalty-status` |
+| `food-get-royalty-entry` | `--royalty-entry-id` | |
+| `food-list-royalty-entries` | | `--franchise-unit-id --royalty-status --limit --offset` |
+
 ### Reports (7 actions)
 | Action | Required Flags | Optional Flags |
 |--------|---------------|----------------|
