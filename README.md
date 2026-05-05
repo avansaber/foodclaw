@@ -36,4 +36,4 @@ The bot will install FoodClaw and guide you through creating menus, building rec
 
 ## License
 
-MIT License -- Copyright (c) 2026 AvanSaber / Nikhil Jathar
+GNU General Public License v3 -- Copyright (c) 2026 AvanSaber / Nikhil Jathar
