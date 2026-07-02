@@ -1,6 +1,6 @@
 # FoodClaw
 
-Restaurant and food service management for [ERPClaw](https://github.com/avansaber/erpclaw). Menus, recipe costing, F&B inventory, staff scheduling, catering, HACCP food safety, and franchise management. <!-- SYNC:value:module.foodclaw.actions -->80<!-- /SYNC --> actions across 7 domains.
+Restaurant and food service management for [ERPClaw](https://github.com/avansaber/erpclaw). Menus, recipe costing, F&B inventory, staff scheduling, catering, HACCP food safety, and franchise management. <!-- SYNC:value:module.foodclaw.actions -->79<!-- /SYNC --> actions across 7 domains.
 
 ## Features
 
