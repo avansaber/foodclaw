@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_INSPECTION_TYPES = ("routine", "health_dept", "internal", "fire", "third_party", "other")
@@ -77,7 +79,7 @@ def add_haccp_log(conn, args):
         getattr(args, "notes", None),
         _now_iso(),
     ))
-    audit(conn, "foodclaw_haccp_log", hl_id, "food-add-haccp-log", args.company_id)
+    audit(conn, SKILL, "food-add-haccp-log", "foodclaw_haccp_log", hl_id)
     conn.commit()
     ok({"id": hl_id, "ccp_name": ccp_name, "log_date": log_date, "is_within_range": is_within})
 
@@ -155,7 +157,7 @@ def add_temp_reading(conn, args):
         getattr(args, "corrective_action", None),
         _now_iso(),
     ))
-    audit(conn, "foodclaw_temp_reading", tr_id, "food-add-temp-reading", args.company_id)
+    audit(conn, SKILL, "food-add-temp-reading", "foodclaw_temp_reading", tr_id)
     conn.commit()
     ok({"id": tr_id, "equipment_name": equipment_name, "temperature": temperature, "is_safe": is_safe})
 
@@ -220,7 +222,7 @@ def add_inspection(conn, args):
         getattr(args, "notes", None),
         now, now,
     ))
-    audit(conn, "foodclaw_inspection", insp_id, "food-add-inspection", args.company_id)
+    audit(conn, SKILL, "food-add-inspection", "foodclaw_inspection", insp_id)
     conn.commit()
     ok({"id": insp_id, "naming_series": ns, "inspection_type": getattr(args, "inspection_type", None) or "routine", "inspection_status": "scheduled"})
 
@@ -266,7 +268,7 @@ def update_inspection(conn, args):
     params.append(insp_id)
 
     conn.execute(f"UPDATE foodclaw_inspection SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_inspection", insp_id, "food-update-inspection", None)
+    audit(conn, SKILL, "food-update-inspection", "foodclaw_inspection", insp_id)
     conn.commit()
     ok({"id": insp_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -326,7 +328,7 @@ def complete_inspection(conn, args):
 
     params.append(insp_id)
     conn.execute(f"UPDATE foodclaw_inspection SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_inspection", insp_id, "food-complete-inspection", None)
+    audit(conn, SKILL, "food-complete-inspection", "foodclaw_inspection", insp_id)
     conn.commit()
     ok({"id": insp_id, "inspection_status": "completed", "score": score, "grade": grade})
 

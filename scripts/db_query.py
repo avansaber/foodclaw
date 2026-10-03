@@ -17,7 +17,7 @@ try:
     import importlib.util
     if importlib.util.find_spec("erpclaw_lib") is None:
         sys.path.insert(0, os.path.join(os.path.expanduser(os.environ.get("ERPCLAW_HOME", "~/.openclaw/erpclaw")), "lib"))
-    from erpclaw_lib.db import get_connection, ensure_db_exists, DEFAULT_DB_PATH
+    from erpclaw_lib.db import get_connection, DEFAULT_DB_PATH
     from erpclaw_lib.validation import check_input_lengths
     from erpclaw_lib.response import ok, err
     from erpclaw_lib.dependencies import check_required_tables
@@ -187,6 +187,9 @@ def main():
     parser.add_argument("--estimated-cost")
     parser.add_argument("--quoted-price")
     parser.add_argument("--deposit-amount")
+    parser.add_argument("--deposit-date")
+    parser.add_argument("--further-deposit", action="store_true")
+    parser.add_argument("--cash-account-id")
     parser.add_argument("--final-amount")
     parser.add_argument("--unit-price")
     parser.add_argument("--requirement")
@@ -194,6 +197,8 @@ def main():
     parser.add_argument("--revenue-account-id")
     parser.add_argument("--receivable-account-id")
     parser.add_argument("--cost-center-id")
+    # --customer-id names the customer on the receivable leg; franchise uses it too
+    parser.add_argument("--customer-id")
 
     # ── FOOD SAFETY domain ───────────────────────────────────────
     parser.add_argument("--ccp-name")
@@ -256,8 +261,7 @@ def main():
     check_unknown_args(parser, unknown)
     check_input_lengths(args)
 
-    db_path = args.db_path or DEFAULT_DB_PATH
-    ensure_db_exists(db_path)
+    db_path = getattr(args, "db_path", None)   # None unless --db-path was given
     conn = get_connection(db_path)
 
     _dep = check_required_tables(conn, REQUIRED_TABLES)

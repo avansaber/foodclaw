@@ -281,6 +281,10 @@ def ns(**kwargs) -> argparse.Namespace:
         "revenue_account_id": None,
         "receivable_account_id": None,
         "cost_center_id": None,
+        "customer_id": None,
+        "cash_account_id": None,
+        "deposit_date": None,
+        "db_path": None,
         # Food safety domain
         "ccp_name": None,
         "log_date": None,
@@ -502,3 +506,344 @@ def build_env(conn) -> dict:
         "employee_id_2": emp2,
         "supplier_id": supplier,
     }
+
+
+def delegate_selling_in_process(conn, monkeypatch, submit_behaviour=None,
+                                create_behaviour=None, payment_behaviour=None,
+                                allocate_behaviour=None, connect=None, *,
+                                delete_behaviour=None, after_add=None):
+    """Redirect cross_skill.call_skill_action to the REAL foundation functions.
+
+    Copied from educlaw's ``test_fee_invoice_bills_through_selling.py`` (the
+    ``add-customer`` branch is dropped: customers are seeded directly through
+    selling ``add_customer``). Keeps every assertion real (item resolution,
+    totals, GL postings) while recording exactly which action and flags the
+    vertical sent through the shared library.
+
+    ``submit_behaviour`` controls ``submit-sales-invoice``: None runs it;
+    "fail" raises CrossSkillError without running it; "lost_reply" runs it
+    and then raises CrossSkillError. ``create_behaviour`` controls
+    ``create-sales-invoice``: "fail" raises CrossSkillError without running
+    it; "reprice" sets the first line's rate to "1400.00" before calling
+    selling (simulates a price rule). ``payment_behaviour`` controls ``submit-payment``: None runs it;
+    "fail" raises CrossSkillError without running it; "submit_then_fail"
+    runs it and then raises CrossSkillError("simulated lost reply").
+    ``allocate_behaviour`` controls ``allocate-payment``: None runs it;
+    "fail_once" raises CrossSkillError("simulated allocation failure") for the
+    first ``allocate-payment`` only, without running it.
+    ``delete_behaviour`` controls ``delete-payment``: None runs it;
+    "fail" raises CrossSkillError without running it; "submit_then_fail"
+    first submits the named payment through the real ``submit_payment`` on a
+    fresh connection (once), then raises CrossSkillError without deleting.
+    ``after_add`` is an optional callable ``after_add(db_path,
+    payment_entry_id)`` run after a successful real ``add-payment`` returns
+    and before the branch returns, so a test can write a competing payment
+    through payments on its own fresh connection.
+    ``connect`` builds fresh child connections on the call's ``db_path``
+    (default the raw ``get_conn``); the payments branches never run on the
+    test's ``conn``.
+    """
+    def _load_domain(domain):
+        path = os.path.join(SRC_DIR, "erpclaw", "scripts", domain, "db_query.py")
+        spec = importlib.util.spec_from_file_location(
+            "_food_sell_%s" % domain.replace("-", "_"), path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    selling = _load_domain("erpclaw-selling")
+    inventory = _load_domain("erpclaw-inventory")
+    payments = _load_domain("erpclaw-payments")
+    from erpclaw_lib import cross_skill as _cs
+    _cs._SERVICE_ITEM_CACHE.clear()
+    captured = {"calls": []}
+
+    def _run(fn, args_ns):
+        buf = io.StringIO()
+
+        def _fake_exit(code=0):
+            raise SystemExit(code)
+
+        try:
+            with patch("sys.stdout", buf), patch("sys.exit", side_effect=_fake_exit):
+                fn(conn, args_ns)
+        except SystemExit:
+            pass
+        return json.loads(buf.getvalue().strip())
+
+    connect_fn = connect if connect is not None else get_conn
+
+    _PAY_DEFAULTS = {
+        "payment_entry_id": None, "company_id": None, "company_name": None,
+        "payment_type": None, "posting_date": None, "party_type": None,
+        "party_id": None, "paid_from_account": None, "paid_to_account": None,
+        "paid_amount": None, "payment_currency": "USD", "exchange_rate": "1",
+        "reference_number": None, "reference_date": None, "allocations": None,
+        "deductions": None, "dimensions": None, "dimension_key": None,
+        "dimension_value": None, "voucher_type": None, "voucher_id": None,
+        "allocated_amount": None, "ple_amount": None, "account_id": None,
+        "against_voucher_type": None, "against_voucher_id": None,
+        "write_off_amount": None, "write_off_account_id": None, "reason": None,
+        "cost_center_id": None, "bank_account_id": None, "pe_status": None,
+        "from_date": None, "to_date": None, "limit": "20", "offset": "0",
+    }
+
+    def _run_fresh(fn, args_ns, fresh):
+        buf = io.StringIO()
+
+        def _fake_exit(code=0):
+            raise SystemExit(code)
+
+        try:
+            with patch("sys.stdout", buf), patch("sys.exit", side_effect=_fake_exit):
+                fn(fresh, args_ns)
+        except SystemExit:
+            pass
+        out = buf.getvalue().strip()
+        if not out:
+            return {"status": "error", "message": "no output captured"}
+        return json.loads(out)
+
+    def _in_process(skill_name, action, args=None, db_path=None, timeout=30):
+        assert not conn.in_transaction, (
+            "FoodClaw holds an uncommitted write across a cross-skill call")
+        flags = dict(args or {})
+        captured["calls"].append(
+            {"skill": skill_name, "action": action, "args": flags})
+        if action == "add-item":
+            result = _run(inventory.add_item, argparse.Namespace(
+                item_code=flags.get("--item-code"),
+                item_name=flags.get("--item-name"),
+                item_type=flags.get("--item-type"),
+                valuation_method=None, item_group=None, stock_uom=None,
+                has_batch=None, has_serial=None, standard_rate=None,
+                custom_fields=None))
+        elif action == "list-items":
+            result = _run(inventory.list_items, argparse.Namespace(
+                item_group=None, item_type=None, search=flags.get("--search"),
+                limit="20", offset="0", warehouse_id=None, company_id=None))
+        elif action == "create-sales-invoice":
+            if create_behaviour == "fail":
+                raise _cs.CrossSkillError("simulated create failure")
+            items_json = flags.get("--items")
+            if create_behaviour == "reprice":
+                lines = json.loads(items_json)
+                lines[0]["rate"] = "1400.00"
+                items_json = json.dumps(lines)
+            result = _run(selling.create_sales_invoice, argparse.Namespace(
+                company_id=flags.get("--company-id"),
+                customer_id=flags.get("--customer-id"),
+                tax_template_id=None, sales_order_id=None,
+                delivery_note_id=None,
+                posting_date=flags.get("--posting-date"),
+                due_date=flags.get("--due-date"),
+                items=items_json, payment_terms_id=None))
+        elif action == "submit-sales-invoice":
+            if submit_behaviour == "fail":
+                raise _cs.CrossSkillError("simulated submit failure")
+            result = _run(selling.submit_sales_invoice, argparse.Namespace(
+                sales_invoice_id=flags.get("--sales-invoice-id")))
+            if submit_behaviour == "lost_reply":
+                raise _cs.CrossSkillError("simulated lost reply")
+        elif action == "add-payment":
+            pay_ns = argparse.Namespace(**{**_PAY_DEFAULTS,
+                "company_id": flags.get("--company-id"),
+                "payment_type": flags.get("--payment-type"),
+                "posting_date": flags.get("--posting-date"),
+                "party_type": flags.get("--party-type"),
+                "party_id": flags.get("--party-id"),
+                "paid_from_account": flags.get("--paid-from-account"),
+                "paid_to_account": flags.get("--paid-to-account"),
+                "paid_amount": flags.get("--paid-amount"),
+                "reference_number": flags.get("--reference-number"),
+                "reference_date": flags.get("--reference-date"),
+                "allocations": flags.get("--allocations"),
+                "deductions": flags.get("--deductions"),
+            })
+            target = db_path if db_path is not None else os.environ.get("ERPCLAW_DB_PATH")
+            fresh = connect_fn(target)
+            try:
+                try:
+                    result = _run_fresh(payments.add_payment, pay_ns, fresh)
+                except _cs.CrossSkillError:
+                    raise
+                except Exception as exc:
+                    try:
+                        fresh.rollback()
+                    except Exception:
+                        pass
+                    raise _cs.CrossSkillError(str(exc) if str(exc) else "add-payment failed")
+            except _cs.CrossSkillError:
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise
+            if result.get("status") == "error":
+                try:
+                    fresh.rollback()
+                except Exception:
+                    pass
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise _cs.CrossSkillError(result.get("message", "add-payment failed"))
+            try:
+                fresh.close()
+            except Exception:
+                pass
+            if after_add is not None:
+                after_add(target, result.get("payment_entry_id"))
+            return result
+        elif action == "submit-payment":
+            if payment_behaviour == "fail":
+                raise _cs.CrossSkillError("simulated payment submit failure")
+            pay_ns = argparse.Namespace(**{**_PAY_DEFAULTS,
+                "payment_entry_id": flags.get("--payment-entry-id"),
+            })
+            target = db_path if db_path is not None else os.environ.get("ERPCLAW_DB_PATH")
+            fresh = connect_fn(target)
+            try:
+                try:
+                    result = _run_fresh(payments.submit_payment, pay_ns, fresh)
+                except _cs.CrossSkillError:
+                    raise
+                except Exception as exc:
+                    try:
+                        fresh.rollback()
+                    except Exception:
+                        pass
+                    raise _cs.CrossSkillError(str(exc) if str(exc) else "submit-payment failed")
+            except _cs.CrossSkillError:
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise
+            if result.get("status") == "error":
+                try:
+                    fresh.rollback()
+                except Exception:
+                    pass
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise _cs.CrossSkillError(result.get("message", "submit-payment failed"))
+            try:
+                fresh.close()
+            except Exception:
+                pass
+            if payment_behaviour == "submit_then_fail":
+                raise _cs.CrossSkillError("simulated lost reply")
+            return result
+        elif action == "delete-payment":
+            if delete_behaviour == "fail":
+                raise _cs.CrossSkillError("simulated delete failure")
+            if delete_behaviour == "submit_then_fail" and not captured.get("delete_submitted"):
+                captured["delete_submitted"] = True
+                sub_ns = argparse.Namespace(**{**_PAY_DEFAULTS,
+                    "payment_entry_id": flags.get("--payment-entry-id"),
+                })
+                sub_target = db_path if db_path is not None else os.environ.get("ERPCLAW_DB_PATH")
+                sub_fresh = connect_fn(sub_target)
+                try:
+                    _run_fresh(payments.submit_payment, sub_ns, sub_fresh)
+                finally:
+                    try:
+                        sub_fresh.close()
+                    except Exception:
+                        pass
+                raise _cs.CrossSkillError("simulated delete failure")
+            pay_ns = argparse.Namespace(**{**_PAY_DEFAULTS,
+                "payment_entry_id": flags.get("--payment-entry-id"),
+            })
+            target = db_path if db_path is not None else os.environ.get("ERPCLAW_DB_PATH")
+            fresh = connect_fn(target)
+            try:
+                try:
+                    result = _run_fresh(payments.delete_payment, pay_ns, fresh)
+                except _cs.CrossSkillError:
+                    raise
+                except Exception as exc:
+                    try:
+                        fresh.rollback()
+                    except Exception:
+                        pass
+                    raise _cs.CrossSkillError(str(exc) if str(exc) else "delete-payment failed")
+            except _cs.CrossSkillError:
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise
+            if result.get("status") == "error":
+                try:
+                    fresh.rollback()
+                except Exception:
+                    pass
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise _cs.CrossSkillError(result.get("message", "delete-payment failed"))
+            try:
+                fresh.close()
+            except Exception:
+                pass
+            return result
+        elif action == "allocate-payment":
+            if allocate_behaviour == "fail_once" and not captured.get("allocate_failed"):
+                captured["allocate_failed"] = True
+                raise _cs.CrossSkillError("simulated allocation failure")
+            pay_ns = argparse.Namespace(**{**_PAY_DEFAULTS,
+                "payment_entry_id": flags.get("--payment-entry-id"),
+                "voucher_type": flags.get("--voucher-type"),
+                "voucher_id": flags.get("--voucher-id"),
+                "allocated_amount": flags.get("--allocated-amount"),
+            })
+            target = db_path if db_path is not None else os.environ.get("ERPCLAW_DB_PATH")
+            fresh = connect_fn(target)
+            try:
+                try:
+                    result = _run_fresh(payments.allocate_payment, pay_ns, fresh)
+                except _cs.CrossSkillError:
+                    raise
+                except Exception as exc:
+                    try:
+                        fresh.rollback()
+                    except Exception:
+                        pass
+                    raise _cs.CrossSkillError(str(exc) if str(exc) else "allocate-payment failed")
+            except _cs.CrossSkillError:
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise
+            if result.get("status") == "error":
+                try:
+                    fresh.rollback()
+                except Exception:
+                    pass
+                try:
+                    fresh.close()
+                except Exception:
+                    pass
+                raise _cs.CrossSkillError(result.get("message", "allocate-payment failed"))
+            try:
+                fresh.close()
+            except Exception:
+                pass
+            return result
+        else:
+            raise AssertionError("unexpected cross-skill action %s" % action)
+        if result.get("status") == "error":
+            conn.rollback()
+            raise _cs.CrossSkillError(
+                result.get("message", "%s failed" % action))
+        return result
+
+    monkeypatch.setattr(_cs, "call_skill_action", _in_process)
+    return captured

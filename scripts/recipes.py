@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -78,7 +80,7 @@ def add_recipe(conn, args):
         "active",
         now, now,
     ))
-    audit(conn, "foodclaw_recipe", recipe_id, "food-add-recipe", args.company_id)
+    audit(conn, SKILL, "food-add-recipe", "foodclaw_recipe", recipe_id)
     conn.commit()
     ok({"id": recipe_id, "naming_series": ns, "name": args.name})
 
@@ -131,7 +133,7 @@ def update_recipe(conn, args):
     params.append(recipe_id)
 
     conn.execute(f"UPDATE foodclaw_recipe SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_recipe", recipe_id, "food-update-recipe", None)
+    audit(conn, SKILL, "food-update-recipe", "foodclaw_recipe", recipe_id)
     conn.commit()
     ok({"id": recipe_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -234,7 +236,7 @@ def add_recipe_ingredient(conn, args):
         getattr(args, "sort_order", None) or 0,
         now, now,
     ))
-    audit(conn, "foodclaw_recipe_ingredient", ri_id, "food-add-recipe-ingredient", None)
+    audit(conn, SKILL, "food-add-recipe-ingredient", "foodclaw_recipe_ingredient", ri_id)
     conn.commit()
     ok({"id": ri_id, "ingredient_name": ingredient_name, "quantity": qty, "unit_cost": unit_cost, "line_cost": line_cost})
 
@@ -289,7 +291,7 @@ def update_recipe_ingredient(conn, args):
     params.append(ri_id)
 
     conn.execute(f"UPDATE foodclaw_recipe_ingredient SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_recipe_ingredient", ri_id, "food-update-recipe-ingredient", None)
+    audit(conn, SKILL, "food-update-recipe-ingredient", "foodclaw_recipe_ingredient", ri_id)
     conn.commit()
     ok({"id": ri_id, "line_cost": line_cost, "updated_fields": [u.split(" = ")[0] for u in updates if u not in ("updated_at = ?", "line_cost = ?")]})
 

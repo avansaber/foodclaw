@@ -1,7 +1,7 @@
 ---
 name: foodclaw
 version: 1.0.0
-description: Restaurant & Food Service Management -- menus, recipe costing, F&B inventory, staff scheduling, catering, HACCP food safety, franchise management. 71 actions across 7 domains. Built on ERPClaw foundation.
+description: Restaurant & Food Service Management -- menus, recipe costing, F&B inventory, staff scheduling, catering, HACCP food safety, franchise management. 72 actions across 7 domains. Built on ERPClaw foundation.
 author: AvanSaber
 homepage: https://github.com/avansaber/foodclaw
 source: https://github.com/avansaber/foodclaw
@@ -142,8 +142,8 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 ### Catering (10 actions)
 | Action | Required Flags | Optional Flags |
 |--------|---------------|----------------|
-| `food-add-catering-event` | `--company-id --event-name --client-name --event-date` | `--client-phone --client-email --event-time --venue --guest-count --estimated-cost --quoted-price --deposit-amount --notes` |
-| `food-update-catering-event` | `--event-id` | `--event-name --client-name --event-date --event-time --venue --guest-count --event-status --estimated-cost --quoted-price --deposit-amount --notes` |
+| `food-add-catering-event` | `--company-id --event-name --client-name --event-date` | `--client-phone --client-email --event-time --venue --guest-count --estimated-cost --quoted-price --deposit-amount --notes` (deposit asked for; it moves no money: receive it with food-receive-catering-deposit) |
+| `food-update-catering-event` | `--event-id` | `--event-name --client-name --event-date --event-time --venue --guest-count --event-status --estimated-cost --quoted-price --deposit-amount --notes` (deposit asked for; it moves no money: receive it with food-receive-catering-deposit; `--event-status completed` is refused: complete and bill the event with food-complete-catering-event) |
 | `food-get-catering-event` | `--event-id` | |
 | `food-list-catering-events` | | `--company-id --event-status --search --limit --offset` |
 | `food-add-catering-item` | `--event-id --item-name` | `--menu-item-id --quantity --unit-price --notes` |
@@ -170,7 +170,8 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 ### Catering (continued)
 | Action | Required Flags | Optional Flags |
 |--------|---------------|----------------|
-| `food-complete-catering-event` | `--event-id` | |
+| `food-complete-catering-event` | `--event-id --customer-id` | `--final-amount` (bills a submitted sales invoice to the company's default receivable and income accounts; the account and cost-centre arguments are not used; applies the event's received deposits to the invoice, a remainder stays an open customer advance; needs --user-confirmed) |
+| `food-receive-catering-deposit` | `--event-id --customer-id` | `--deposit-amount --deposit-date --cash-account-id --further-deposit` (event quoted, confirmed or in progress; records a submitted customer payment to the company's default receivable, or its customer-advance account, into the cash account or the company default cash/bank; completion applies it to the event's invoice; an explicit amount equal to a deposit the customer already paid for the event is refused unless --further-deposit; a call that finds another deposit being recorded removes its own draft and refuses; needs --user-confirmed) |
 
 ### Franchise (9 actions)
 | Action | Required Flags | Optional Flags |
@@ -179,7 +180,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `food-update-franchise-unit` | `--franchise-unit-id` | `--unit-name --location --manager-name --unit-status` |
 | `food-get-franchise-unit` | `--franchise-unit-id` | |
 | `food-list-franchise-units` | | `--company-id --unit-status --search --limit --offset` |
-| `food-add-royalty-entry` | `--franchise-unit-id --period-start --period-end` | `--gross-sales --royalty-rate --royalty-amount` |
+| `food-add-royalty-entry` | `--franchise-unit-id --period-start --period-end` | `--gross-sales --royalty-rate --royalty-amount --royalty-income-account-id --royalty-receivable-account-id --marketing-expense-account-id --cost-center-id --customer-id` |
 | `food-update-royalty-status` | `--royalty-entry-id` | `--royalty-status` |
 | `food-get-royalty-entry` | `--royalty-entry-id` | |
 | `food-list-royalty-entries` | | `--franchise-unit-id --royalty-status --limit --offset` |
@@ -219,7 +220,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 
 ## Technical Details (Tier 3)
 
-**Tables owned (20):** foodclaw_menu, foodclaw_menu_item, foodclaw_modifier_group, foodclaw_modifier, foodclaw_recipe, foodclaw_recipe_ingredient, foodclaw_ingredient, foodclaw_stock_count, foodclaw_waste_log, foodclaw_purchase_order, foodclaw_employee, foodclaw_shift, foodclaw_tip_distribution, foodclaw_catering_event, foodclaw_catering_item, foodclaw_dietary_requirement, foodclaw_haccp_log, foodclaw_temp_reading, foodclaw_inspection, foodclaw_franchise_unit, foodclaw_royalty_entry
+**Tables owned (22):** foodclaw_menu, foodclaw_menu_item, foodclaw_modifier_group, foodclaw_modifier, foodclaw_recipe, foodclaw_recipe_ingredient, foodclaw_ingredient, foodclaw_stock_count, foodclaw_waste_log, foodclaw_purchase_order, foodclaw_employee, foodclaw_shift, foodclaw_tip_distribution, foodclaw_catering_event, foodclaw_catering_item, foodclaw_catering_invoice, foodclaw_dietary_requirement, foodclaw_haccp_log, foodclaw_temp_reading, foodclaw_inspection, foodclaw_franchise_unit, foodclaw_royalty_entry
 
 **Script:** `scripts/db_query.py` routes to 7 domain modules: menu.py, recipes.py, inventory.py, staff.py, catering.py, food_safety.py, reports.py
 

@@ -2,7 +2,7 @@
 """FoodClaw schema extension — adds domain tables to the shared database.
 
 AI-native restaurant & food service management.
-21 tables across 7 domains: menu, recipes, inventory, staff, catering,
+22 tables across 7 domains: menu, recipes, inventory, staff, catering,
 food safety, franchise.
 
 Prerequisite: ERPClaw init_db.py must have run first (creates foundation tables).
@@ -422,7 +422,7 @@ Index("idx_foodclaw_tips_employee", TIP_DISTRIBUTION.c.employee_id)
 Index("idx_foodclaw_tips_date", TIP_DISTRIBUTION.c.tip_date)
 
 # ==================================================================
-# DOMAIN 5: CATERING (3 tables)
+# DOMAIN 5: CATERING (4 tables)
 # ==================================================================
 
 # ---------------------------------------------------------------------------
@@ -483,6 +483,24 @@ CATERING_ITEM = Table(
 )
 
 Index("idx_foodclaw_catering_item_event", CATERING_ITEM.c.event_id)
+
+# ---------------------------------------------------------------------------
+# 15b. foodclaw_catering_invoice
+# ---------------------------------------------------------------------------
+# The sales invoice is the selling module's document; this row is FoodClaw's
+# link to it, one per event.
+CATERING_INVOICE = Table(
+    "foodclaw_catering_invoice", METADATA,
+    Column("id", Text, primary_key=True, nullable=True),
+    Column("event_id", Text, ForeignKey("foodclaw_catering_event.id"), nullable=False, unique=True),
+    Column("sales_invoice_id", Text, nullable=False, unique=True),
+    Column("customer_id", Text, nullable=False),
+    Column("amount", Text, nullable=False),
+    Column("company_id", Text, nullable=False),
+    Column("created_at", Text, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+Index("idx_foodclaw_catering_invoice_company", CATERING_INVOICE.c.company_id)
 
 # ---------------------------------------------------------------------------
 # 16. foodclaw_dietary_requirement

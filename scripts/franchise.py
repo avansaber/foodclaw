@@ -27,12 +27,16 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 # GL posting -- optional integration (graceful degradation)
 try:
     from erpclaw_lib.gl_posting import insert_gl_entries
     HAS_GL = True
 except ImportError:
     HAS_GL = False
+
+ROYALTY_VOUCHER_TYPE = "food_franchise_royalty"
 
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -88,7 +92,7 @@ def add_franchise_unit(conn, args):
         "active",
         now, now,
     ))
-    audit(conn, "foodclaw_franchise_unit", unit_id, "food-add-franchise-unit", args.company_id)
+    audit(conn, SKILL, "food-add-franchise-unit", "foodclaw_franchise_unit", unit_id)
     conn.commit()
     ok({"id": unit_id, "naming_series": ns, "unit_name": unit_name, "status": "active"})
 
@@ -123,7 +127,7 @@ def update_franchise_unit(conn, args):
     conn.execute(
         f"UPDATE foodclaw_franchise_unit SET {', '.join(updates)} WHERE id = ?", params
     )
-    audit(conn, "foodclaw_franchise_unit", unit_id, "food-update-franchise-unit", None)
+    audit(conn, SKILL, "food-update-franchise-unit", "foodclaw_franchise_unit", unit_id)
     conn.commit()
     ok({"id": unit_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -182,10 +186,11 @@ def list_franchise_units(conn, args):
 # 5. add-royalty-entry (with GL posting for royalty income recognition)
 # ---------------------------------------------------------------------------
 def add_royalty_entry(conn, args):
-    """Record a royalty entry for a franchise unit with optional GL posting.
+    """Record a royalty entry for a franchise unit with GL posting.
 
     GL pattern for franchise royalty income:
       DR: Franchise Receivable (royalty_receivable_account_id) for total_due
+          — party_type=customer, party_id=customer_id
       CR: Royalty Income (royalty_income_account_id) for royalty_amount
       CR: Marketing Fee Income (marketing_expense_account_id) for marketing_fee
           (if marketing_fee > 0 and marketing account is configured)
@@ -193,8 +198,10 @@ def add_royalty_entry(conn, args):
     If marketing_expense_account_id is not provided but marketing_fee > 0,
     marketing_fee is rolled into the royalty income credit.
 
-    GL posting is OPTIONAL. If GL accounts are not provided, the royalty entry
-    is created without GL entries.
+    GL posting is optional only when no account is given: the entry is then
+    recorded without GL entries. A partial account configuration, a missing
+    customer, or a refused posting refuses the whole action and writes
+    nothing.
     """
     _validate_company(conn, args.company_id)
     franchise_unit_id = getattr(args, "franchise_unit_id", None)
@@ -231,21 +238,42 @@ def add_royalty_entry(conn, args):
         )
     )
 
-    entry_id = str(uuid.uuid4())
-    ns = get_next_name(conn, "foodclaw_royalty_entry", company_id=args.company_id)
-    now = _now_iso()
-
     # GL account configuration
     royalty_income_account_id = getattr(args, "royalty_income_account_id", None)
     royalty_receivable_account_id = getattr(args, "royalty_receivable_account_id", None)
     marketing_expense_account_id = getattr(args, "marketing_expense_account_id", None)
     cost_center_id = getattr(args, "cost_center_id", None)
 
+    if ((royalty_income_account_id or royalty_receivable_account_id
+            or marketing_expense_account_id)
+            and not (royalty_income_account_id and royalty_receivable_account_id)):
+        err("Cannot post a royalty entry: --royalty-income-account-id and "
+            "--royalty-receivable-account-id must both be given to post to the ledger")
+    customer_id = None
+    if royalty_income_account_id and royalty_receivable_account_id:
+        if not HAS_GL:
+            err("Cannot post a royalty entry: the ledger posting library is not available")
+        if to_decimal(total_due) > Decimal("0"):
+            customer_id = getattr(args, "customer_id", None)
+            if not customer_id:
+                err("--customer-id is required to post a royalty entry: the receivable "
+                    "leg must name the franchisee's customer record")
+            found = conn.execute(
+                Q.from_(Table("customer")).select(Field("id"))
+                .where(Field("id") == P()).where(Field("company_id") == P()).get_sql(),
+                (customer_id, args.company_id)).fetchone()
+            if not found:
+                err(f"Customer {customer_id} not found in company {args.company_id}")
+
+    entry_id = str(uuid.uuid4())
+    ns = get_next_name(conn, "foodclaw_royalty_entry", company_id=args.company_id)
+    now = _now_iso()
+
     gl_entry_ids_str = None
     gl_posted = False
 
-    # GL posting -- optional, requires at least income + receivable accounts + HAS_GL
-    if HAS_GL and royalty_income_account_id and royalty_receivable_account_id:
+    # GL posting — both accounts and a customer are configured by this point
+    if royalty_income_account_id and royalty_receivable_account_id:
         total_due_dec = to_decimal(total_due)
         royalty_amount_dec = to_decimal(royalty_amount)
         marketing_fee_dec = to_decimal(marketing_fee)
@@ -257,7 +285,7 @@ def add_royalty_entry(conn, args):
                     "debit": str(total_due_dec),
                     "credit": "0",
                     "party_type": "customer",
-                    "party_id": franchise_unit_id,
+                    "party_id": customer_id,
                 },
             ]
 
@@ -292,7 +320,7 @@ def add_royalty_entry(conn, args):
             try:
                 gl_ids = insert_gl_entries(
                     conn, entries,
-                    voucher_type="Franchise Royalty",
+                    voucher_type=ROYALTY_VOUCHER_TYPE,
                     voucher_id=entry_id,
                     posting_date=period_end,
                     company_id=args.company_id,
@@ -300,12 +328,9 @@ def add_royalty_entry(conn, args):
                 )
                 gl_entry_ids_str = ",".join(gl_ids)
                 gl_posted = True
-            except (ValueError, Exception) as e:
-                # GL posting failed -- log warning but still create the royalty entry
-                import sys as _sys
-                _sys.stderr.write(
-                    f"[foodclaw] GL posting warning for royalty entry {entry_id}: {e}\n"
-                )
+            except ValueError as e:
+                conn.rollback()
+                err(f"Royalty entry was not recorded: the ledger posting was refused: {e}")
 
     conn.execute("""
         INSERT INTO foodclaw_royalty_entry (id, naming_series, company_id, franchise_unit_id,
@@ -324,7 +349,7 @@ def add_royalty_entry(conn, args):
         getattr(args, "notes", None),
         now,
     ))
-    audit(conn, "foodclaw_royalty_entry", entry_id, "food-add-royalty-entry", args.company_id)
+    audit(conn, SKILL, "food-add-royalty-entry", "foodclaw_royalty_entry", entry_id)
     conn.commit()
 
     result = {
@@ -413,7 +438,7 @@ def update_royalty_payment_status(conn, args):
 
     sql, upd_params = dynamic_update("foodclaw_royalty_entry", {"payment_status": payment_status}, where={"id": royalty_id})
     conn.execute(sql, upd_params)
-    audit(conn, "foodclaw_royalty_entry", royalty_id, "food-update-royalty-status", None)
+    audit(conn, SKILL, "food-update-royalty-status", "foodclaw_royalty_entry", royalty_id)
     conn.commit()
     ok({"id": royalty_id, "payment_status": payment_status})
 

@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_ROLES = ("manager", "chef", "sous_chef", "line_cook", "prep_cook", "server",
@@ -81,7 +83,7 @@ def add_employee(conn, args):
         getattr(args, "certifications", None),
         now, now,
     ))
-    audit(conn, "foodclaw_employee", emp_id, "food-add-employee", args.company_id)
+    audit(conn, SKILL, "food-add-employee", "foodclaw_employee", emp_id)
     conn.commit()
     ok({"id": emp_id, "naming_series": ns, "employee_id": core_emp_id,
         "full_name": row[1], "role": getattr(args, "role", None) or "staff"})
@@ -127,7 +129,7 @@ def update_employee(conn, args):
     params.append(emp_id)
 
     conn.execute(f"UPDATE foodclaw_employee SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_employee", emp_id, "food-update-employee", None)
+    audit(conn, SKILL, "food-update-employee", "foodclaw_employee", emp_id)
     conn.commit()
     ok({"id": emp_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -208,7 +210,7 @@ def add_shift(conn, args):
         getattr(args, "notes", None),
         now, now,
     ))
-    audit(conn, "foodclaw_shift", shift_id, "food-add-shift", args.company_id)
+    audit(conn, SKILL, "food-add-shift", "foodclaw_shift", shift_id)
     conn.commit()
     ok({"id": shift_id, "employee_id": emp_id, "shift_date": shift_date, "shift_status": "scheduled"})
 
@@ -249,7 +251,7 @@ def update_shift(conn, args):
     params.append(shift_id)
 
     conn.execute(f"UPDATE foodclaw_shift SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_shift", shift_id, "food-update-shift", None)
+    audit(conn, SKILL, "food-update-shift", "foodclaw_shift", shift_id)
     conn.commit()
     ok({"id": shift_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -302,7 +304,7 @@ def clock_in(conn, args):
         "updated_at": now,
     }, where={"id": shift_id})
     conn.execute(sql, upd_params)
-    audit(conn, "foodclaw_shift", shift_id, "food-clock-in", None)
+    audit(conn, SKILL, "food-clock-in", "foodclaw_shift", shift_id)
     conn.commit()
     ok({"id": shift_id, "shift_status": "clocked_in", "clock_in_time": now})
 
@@ -341,7 +343,7 @@ def clock_out(conn, args):
         "updated_at": now,
     }, where={"id": shift_id})
     conn.execute(sql, upd_params)
-    audit(conn, "foodclaw_shift", shift_id, "food-clock-out", None)
+    audit(conn, SKILL, "food-clock-out", "foodclaw_shift", shift_id)
     conn.commit()
     ok({"id": shift_id, "shift_status": "clocked_out", "clock_out_time": now, "hours_worked": hours_worked})
 
@@ -380,7 +382,7 @@ def add_tip_distribution(conn, args):
         getattr(args, "notes", None),
         _now_iso(),
     ))
-    audit(conn, "foodclaw_tip_distribution", tip_id, "food-add-tip-distribution", args.company_id)
+    audit(conn, SKILL, "food-add-tip-distribution", "foodclaw_tip_distribution", tip_id)
     conn.commit()
     ok({"id": tip_id, "employee_id": emp_id, "total_tips": total_tips})
 

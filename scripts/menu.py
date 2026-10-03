@@ -26,6 +26,8 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # ---------------------------------------------------------------------------
@@ -71,7 +73,7 @@ def add_menu(conn, args):
         getattr(args, "end_date", None),
         now, now,
     ))
-    audit(conn, "foodclaw_menu", menu_id, "food-add-menu", args.company_id)
+    audit(conn, SKILL, "food-add-menu", "foodclaw_menu", menu_id)
     conn.commit()
     ok({"id": menu_id, "naming_series": ns, "name": args.name})
 
@@ -110,7 +112,7 @@ def update_menu(conn, args):
     data["updated_at"] = _now_iso()
     sql, params = dynamic_update("foodclaw_menu", data, where={"id": menu_id})
     conn.execute(sql, params)
-    audit(conn, "foodclaw_menu", menu_id, "food-update-menu", None)
+    audit(conn, SKILL, "food-update-menu", "foodclaw_menu", menu_id)
     conn.commit()
     ok({"id": menu_id, "updated_fields": changed})
 
@@ -200,7 +202,7 @@ def add_menu_item(conn, args):
         getattr(args, "sort_order", None) or 0,
         now, now,
     ))
-    audit(conn, "foodclaw_menu_item", item_id, "food-add-menu-item", args.company_id)
+    audit(conn, SKILL, "food-add-menu-item", "foodclaw_menu_item", item_id)
     conn.commit()
     ok({"id": item_id, "naming_series": ns, "name": args.name, "price": price, "cost": cost})
 
@@ -247,7 +249,7 @@ def update_menu_item(conn, args):
     data["updated_at"] = _now_iso()
     sql, params = dynamic_update("foodclaw_menu_item", data, where={"id": item_id})
     conn.execute(sql, params)
-    audit(conn, "foodclaw_menu_item", item_id, "food-update-menu-item", None)
+    audit(conn, SKILL, "food-update-menu-item", "foodclaw_menu_item", item_id)
     conn.commit()
     ok({"id": item_id, "updated_fields": changed})
 
@@ -321,7 +323,7 @@ def add_modifier_group(conn, args):
         getattr(args, "menu_item_id", None),
         now, now,
     ))
-    audit(conn, "foodclaw_modifier_group", group_id, "food-add-modifier-group", args.company_id)
+    audit(conn, SKILL, "food-add-modifier-group", "foodclaw_modifier_group", group_id)
     conn.commit()
     ok({"id": group_id, "name": args.name})
 
@@ -377,7 +379,7 @@ def add_modifier(conn, args):
         getattr(args, "sort_order", None) or 0,
         now, now,
     ))
-    audit(conn, "foodclaw_modifier", mod_id, "food-add-modifier", args.company_id)
+    audit(conn, SKILL, "food-add-modifier", "foodclaw_modifier", mod_id)
     conn.commit()
     ok({"id": mod_id, "name": args.name, "price_adjustment": price_adj})
 

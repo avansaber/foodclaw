@@ -26,6 +26,8 @@ try:
 except ImportError:
     pass
 
+SKILL = "foodclaw"
+
 _now_iso = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 VALID_INGREDIENT_CATEGORIES = ("produce", "protein", "dairy", "dry_goods", "frozen", "beverage", "spice", "oil", "other")
@@ -81,7 +83,7 @@ def add_ingredient(conn, args):
         "active",
         now, now,
     ))
-    audit(conn, "foodclaw_ingredient", ing_id, "food-add-ingredient", args.company_id)
+    audit(conn, SKILL, "food-add-ingredient", "foodclaw_ingredient", ing_id)
     conn.commit()
     ok({"id": ing_id, "naming_series": ns, "name": args.name, "unit_cost": unit_cost})
 
@@ -138,7 +140,7 @@ def update_ingredient(conn, args):
     params.append(ing_id)
 
     conn.execute(f"UPDATE foodclaw_ingredient SET {', '.join(updates)} WHERE id = ?", params)
-    audit(conn, "foodclaw_ingredient", ing_id, "food-update-ingredient", row["company_id"])
+    audit(conn, SKILL, "food-update-ingredient", "foodclaw_ingredient", ing_id)
     conn.commit()
     ok({"id": ing_id, "updated_fields": [u.split(" = ")[0] for u in updates if u != "updated_at = ?"]})
 
@@ -219,7 +221,7 @@ def add_stock_count(conn, args):
     # Update current stock to match count
     sql_upd, upd_params = dynamic_update("foodclaw_ingredient", {"current_stock": counted_qty, "updated_at": _now_iso()}, where={"id": ing_id})
     conn.execute(sql_upd, upd_params)
-    audit(conn, "foodclaw_stock_count", sc_id, "food-add-stock-count", args.company_id)
+    audit(conn, SKILL, "food-add-stock-count", "foodclaw_stock_count", sc_id)
     conn.commit()
     ok({"id": sc_id, "ingredient_id": ing_id, "counted_qty": counted_qty, "system_qty": system_qty, "variance": variance})
 
@@ -284,7 +286,7 @@ def add_waste_log(conn, args):
         getattr(args, "notes", None),
         _now_iso(),
     ))
-    audit(conn, "foodclaw_waste_log", wl_id, "food-add-waste-log", args.company_id)
+    audit(conn, SKILL, "food-add-waste-log", "foodclaw_waste_log", wl_id)
     conn.commit()
     ok({"id": wl_id, "item_name": item_name, "quantity": quantity, "cost": waste_cost})
 
@@ -348,7 +350,7 @@ def add_purchase_order(conn, args):
         getattr(args, "items_json", None),
         now, now,
     ))
-    audit(conn, "foodclaw_purchase_order", po_id, "food-add-purchase-order", args.company_id)
+    audit(conn, SKILL, "food-add-purchase-order", "foodclaw_purchase_order", po_id)
     conn.commit()
     ok({"id": po_id, "naming_series": ns, "supplier_id": supplier_id, "supplier_name": sup_row[1], "order_status": "draft", "total_amount": total_amount})
 

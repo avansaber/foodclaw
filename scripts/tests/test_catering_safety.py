@@ -20,10 +20,42 @@ if _TESTS_DIR not in sys.path:
 
 from food_helpers import (
     call_action, ns, is_ok, is_error, load_db_query,
+    delegate_selling_in_process,
 )
 
 _mod = load_db_query()
 ACTIONS = _mod.ACTIONS
+
+SELLING_ACTIONS = None
+
+
+def _add_customer(conn, company_id, name="Diner Corp"):
+    global SELLING_ACTIONS
+    if SELLING_ACTIONS is None:
+        import importlib.util as _ilu
+        import os as _os
+        _src = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+            _os.path.dirname(_os.path.abspath(__file__)))))
+        _selling_path = _os.path.join(
+            _src, "erpclaw", "scripts", "erpclaw-selling", "db_query.py")
+        _spec = _ilu.spec_from_file_location("_safety_selling", _selling_path)
+        _selling = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_selling)
+        SELLING_ACTIONS = _selling
+
+    class _AnyArgs:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+        def __getattr__(self, name):
+            return None
+
+    result = call_action(
+        SELLING_ACTIONS.add_customer, conn,
+        _AnyArgs(name=name, company_id=company_id),
+    )
+    assert is_ok(result), result
+    return result["customer_id"]
 
 
 # ── Catering Event Tests ────────────────────────────────────────────────────
@@ -258,7 +290,9 @@ class TestConfirmEvent:
 class TestCompleteCateringEvent:
     """food-complete-catering-event"""
 
-    def test_complete_with_final_amount(self, conn, env):
+    def test_complete_with_final_amount(self, conn, env, db_path, monkeypatch):
+        customer_id = _add_customer(conn, env["company_id"])
+        delegate_selling_in_process(conn, monkeypatch)
         add = call_action(ACTIONS["food-add-catering-event"], conn,
                           ns(company_id=env["company_id"],
                              event_name="Complete Test", client_name="Z",
@@ -269,13 +303,16 @@ class TestCompleteCateringEvent:
                      ns(event_id=add["id"]))
         result = call_action(
             ACTIONS["food-complete-catering-event"], conn,
-            ns(event_id=add["id"], final_amount="2500.00"),
+            ns(event_id=add["id"], final_amount="2500.00",
+               customer_id=customer_id, db_path=db_path),
         )
         assert is_ok(result), result
         assert result["event_status"] == "completed"
         assert result["final_amount"] == "2500.00"
 
-    def test_complete_with_quoted_price(self, conn, env):
+    def test_complete_with_quoted_price(self, conn, env, db_path, monkeypatch):
+        customer_id = _add_customer(conn, env["company_id"])
+        delegate_selling_in_process(conn, monkeypatch)
         add = call_action(ACTIONS["food-add-catering-event"], conn,
                           ns(company_id=env["company_id"],
                              event_name="QP Test", client_name="W",
@@ -285,7 +322,7 @@ class TestCompleteCateringEvent:
                      ns(event_id=add["id"]))
         result = call_action(
             ACTIONS["food-complete-catering-event"], conn,
-            ns(event_id=add["id"]),
+            ns(event_id=add["id"], customer_id=customer_id, db_path=db_path),
         )
         assert is_ok(result), result
         assert result["final_amount"] == "1500.00"
@@ -324,8 +361,10 @@ class TestCateringCostEstimate:
         )
         assert is_ok(result), result
         # 100*20 + 100*8 = 2000 + 800 = 2800
-        assert result["total_cost"] == "2800.00"
-        assert result["cost_per_guest"] == "28.00"
+        assert result["total_price"] == "2800.00"
+        assert result["price_per_guest"] == "28.00"
+        assert result["total_cost"] == "0.00"
+        assert result["cost_source"] == "none"
 
 
 # ── HACCP Log Tests ─────────────────────────────────────────────────────────
